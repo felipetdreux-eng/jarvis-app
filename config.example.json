@@ -1,0 +1,8 @@
+{
+  "url": "",
+  "buttons": [
+    { "label": "Chrome", "hint": "Abre o Chrome", "type": "app", "target": "Google Chrome" },
+    { "label": "Projeto exemplo", "hint": "Abre varias abas de uma vez", "type": "urls", "browser": "chrome", "urls": ["https://github.com", "https://claude.ai"] },
+    { "label": "Obsidian", "hint": "Abre o Obsidian", "type": "app", "target": "Obsidian" }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "jarvis-app",
+  "version": "0.1.0",
+  "description": "Abre a pagina do seu Jarvis na area de trabalho e lanca abas e programas.",
+  "main": "main.js",
+  "author": "Felipe",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist:mac": "electron-builder --mac --x64",
+    "dist:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "32.3.3",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "app.jarvis.desktop",
+    "productName": "Jarvis",
+    "files": ["main.js", "preload.js", "shell.html", "config.example.json", "package.json"],
+    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.productivity", "minimumSystemVersion": "10.15.0", "identity": null },
+    "win": { "target": ["nsis"] },
+    "nsis": { "oneClick": true, "perMachine": false }
+  }
+}

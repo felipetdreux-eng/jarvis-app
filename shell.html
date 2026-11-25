@@ -1,0 +1,32 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Jarvis</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#05070b;color:#cfd8e6;font:13px -apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+#dock{position:fixed;left:0;top:0;bottom:0;width:76px;border-right:1px solid rgba(120,170,255,.14);display:flex;flex-direction:column;gap:6px;padding:12px 8px;overflow:auto}
+#dock button{border:1px solid rgba(120,170,255,.2);background:rgba(120,170,255,.04);color:#cfd8e6;border-radius:8px;padding:10px 4px;font:inherit;font-size:11px;cursor:pointer;word-break:break-word}
+#dock button:hover{border-color:#7fd0ff;color:#fff}
+#dock .sp{flex:1}#dock .mini{opacity:.6;font-size:10px;padding:6px 2px}
+#setup{position:fixed;left:76px;right:0;top:0;bottom:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:24px}
+#setup.on{display:flex}
+#setup input{width:min(520px,90%);padding:12px 16px;border-radius:8px;border:1px solid rgba(120,170,255,.3);background:#0a0f18;color:#fff;font:14px inherit}
+#setup button{padding:10px 22px;border-radius:8px;border:1px solid #7fd0ff;background:none;color:#7fd0ff;cursor:pointer;font-size:14px}
+h1{font-weight:500;letter-spacing:.3em;margin:0;font-size:15px}p{margin:0;color:#7f8fa8;max-width:520px;line-height:1.5}
+</style></head><body>
+<div id="dock"></div>
+<div id="setup"><h1>JARVIS</h1><p>Cole o endereco da pagina do seu Jarvis (https://...). Voce faz login nela uma vez e o app lembra.</p>
+<input id="u" placeholder="https://claude.ai/artifact/..." autocomplete="off"><button id="ok">Abrir</button></div>
+<script>
+const dock=document.getElementById('dock');
+function mini(t,w){const b=document.createElement('button');b.className='mini';b.textContent=t;b.onclick=()=>jarvis.menu(w);return b}
+jarvis.buttons().then(list=>{
+  list.forEach((b,i)=>{const el=document.createElement('button');el.textContent=b.label;if(b.hint)el.title=b.hint;el.onclick=()=>jarvis.launch(i);dock.appendChild(el)});
+  const sp=document.createElement('div');sp.className='sp';dock.appendChild(sp);
+  dock.append(mini('editar botoes','edit'),mini('trocar link','url'),mini('recarregar','reload'),mini('tela cheia','full'));
+});
+const s=document.getElementById('setup');
+jarvis.onSetup(on=>s.classList.toggle('on',!!on));
+function go(){const v=document.getElementById('u').value.trim();if(/^https?:\/\//i.test(v))jarvis.setUrl(v)}
+document.getElementById('ok').onclick=go;
+document.getElementById('u').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
+</script></body></html>
