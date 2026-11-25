@@ -9,5 +9,6 @@ contextBridge.exposeInMainWorld('jarvis', {
   openShortcut: i => ipcRenderer.send('open-shortcut', i),
   ask: w => ipcRenderer.send('ask', w),
   mode: n => ipcRenderer.send('mode', n),
+  onDock: f => ipcRenderer.on('dock', (_e, on) => f(on)),
   onSetup: f => ipcRenderer.on('setup', (_e, on) => f(on))
 });

@@ -7,7 +7,7 @@
 #dock button{border:1px solid rgba(120,170,255,.2);background:rgba(120,170,255,.04);color:#cfd8e6;border-radius:8px;padding:10px 4px;font:inherit;font-size:11px;cursor:pointer;word-break:break-word}
 #dock button:hover{border-color:#7fd0ff;color:#fff}
 #dock .sp{flex:1}#dock .mini{opacity:.6;font-size:10px;padding:6px 2px}
-#setup{position:fixed;left:76px;right:0;top:0;bottom:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:24px}
+#setup{position:fixed;left:0;right:0;top:0;bottom:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:24px}
 #setup.on{display:flex}
 #setup input{width:min(520px,90%);padding:12px 16px;border-radius:8px;border:1px solid rgba(120,170,255,.3);background:#0a0f18;color:#fff;font:14px inherit}
 #setup button{padding:10px 22px;border-radius:8px;border:1px solid #7fd0ff;background:none;color:#7fd0ff;cursor:pointer;font-size:14px}
@@ -32,7 +32,7 @@
 #grid b{display:block;font-weight:500;color:#fff;font-size:13px}#grid span{font-size:10px;color:#7f8fa8}
 h1{font-weight:500;letter-spacing:.3em;margin:0;font-size:15px}p{margin:0;color:#7f8fa8;max-width:520px;line-height:1.5}
 </style></head><body>
-<div id="dock"></div>
+<div id="dock" style="display:none"></div>
 <div id="setup"><h1>JARVIS</h1><p>Cole o endereco da pagina do seu Jarvis (https://...). Voce faz login nela uma vez e o app lembra.</p>
 <input id="u" placeholder="https://claude.ai/artifact/..." autocomplete="off"><button id="ok">Abrir</button><p>ou, se o vault do Obsidian ja esta nesta maquina:</p><button id="lv">Usar pasta do vault (pagina local)</button></div>
 <div id="notes"><div id="nl"><input id="q" placeholder="buscar nota..." autocomplete="off"><div class="bar"><button id="pick">trocar pasta</button><button id="obs">abrir Obsidian</button></div><div id="items"></div></div><div id="nr"><p>Escolha uma nota.</p></div></div>
@@ -82,6 +82,7 @@ jarvis.buttons().then(list=>{
   const sp=document.createElement('div');sp.className='sp';dock.appendChild(sp);
   dock.append(mini('editar botoes','edit'),mini('trocar link','url'),mini('recarregar','reload'),mini('tela cheia','full'));
 });
+jarvis.onDock(on=>{dock.style.display=on?'flex':'none';document.querySelectorAll('#setup,#notes,#sc').forEach(e=>e.style.left=on?'76px':'0')});
 const s=document.getElementById('setup');
 jarvis.onSetup(on=>s.classList.toggle('on',!!on));
 function go(){const v=document.getElementById('u').value.trim();if(/^https?:\/\//i.test(v))jarvis.setUrl(v)}

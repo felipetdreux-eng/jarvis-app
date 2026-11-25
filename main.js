@@ -5,7 +5,7 @@ const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const DOCK = 76; // largura do dock em pixels
+const dockW = () => (cfg && cfg.dock === true ? 76 : 0); // dock so se cfg.dock=true; padrao: pagina inteira, igual a web
 let win, view, cfg;
 const cfgPath = () => path.join(app.getPath('userData'), 'config.json');
 
@@ -24,7 +24,7 @@ const isHttp = u => { try { const p = new URL(u).protocol; return p === 'https:'
 function layout() {
   if (!win || !view) return;
   const [w, h] = win.getContentSize();
-  view.setBounds({ x: DOCK, y: 0, width: Math.max(0, w - DOCK), height: h });
+  const D = dockW(); view.setBounds({ x: D, y: 0, width: Math.max(0, w - D), height: h });
 }
 
 // Pagina local: <vault>/Horizonte/parede.html (a mesma do navegador, roda sem internet)
@@ -35,8 +35,9 @@ function showJarvis() {
   win.contentView.addChildView(view);
   layout();
   view.webContents.setWindowOpenHandler(({ url }) => { if (isHttp(url)) shell.openExternal(url); return { action: 'deny' }; });
+  // mesma pagina da web (mesmo codigo, tudo funciona) quando ha link; senao a copia local do vault
   const lp = localPage();
-  if (lp) view.webContents.loadFile(lp); else view.webContents.loadURL(cfg.url);
+  if (cfg.url) view.webContents.loadURL(cfg.url); else if (lp) view.webContents.loadFile(lp);
 }
 
 function createWindow() {
@@ -49,7 +50,7 @@ function createWindow() {
     { webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } }));
   win.on('resize', layout);
   win.loadFile('shell.html');
-  win.webContents.once('did-finish-load', () => { if (cfg && (cfg.url || localPage())) showJarvis(); else showSetup(); });
+  win.webContents.once('did-finish-load', () => { win.webContents.send('dock', dockW() > 0); if (cfg && (cfg.url || localPage())) showJarvis(); else showSetup(); });
 }
 function showSetup() { if (view) { win.contentView.removeChildView(view); view = null; } win.webContents.send('setup', true); }
 
@@ -126,6 +127,7 @@ app.whenReady().then(() => {
       { label: 'Trocar endereco do Jarvis', click: () => showSetup() },
       { label: 'Editar botoes (abre config.json)', click: () => { if (!fs.existsSync(cfgPath())) saveCfg(cfg); shell.openPath(cfgPath()); } },
       { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => view && view.webContents.reload() },
+      { label: 'Mostrar/esconder dock', click: () => { cfg.dock = !(cfg.dock === true); saveCfg(cfg); win.webContents.send('dock', dockW() > 0); layout(); } },
       { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'quit' } ] },
     { role: 'editMenu' } ]));
   createWindow();
