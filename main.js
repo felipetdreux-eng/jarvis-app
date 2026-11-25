@@ -29,6 +29,23 @@ function layout() {
 
 // Pagina local: <vault>/Horizonte/parede.html (a mesma do navegador, roda sem internet)
 function localPage() { if (!cfg || !cfg.vault) return null; const p = path.join(cfg.vault, 'Horizonte', 'parede.html'); return fs.existsSync(p) ? p : null; }
+// ---- favoritos do Chrome (lidos do disco, so no seu computador) ----
+function chromeBookmarks() {
+  const home = app.getPath('home');
+  const files = process.platform === 'darwin' ? [path.join(home, 'Library/Application Support/Google/Chrome/Default/Bookmarks')]
+    : process.platform === 'win32' ? [path.join(process.env.LOCALAPPDATA || '', 'Google/Chrome/User Data/Default/Bookmarks')]
+    : [path.join(home, '.config/google-chrome/Default/Bookmarks')];
+  const out = [];
+  const walkB = n => { if (!n || out.length >= 400) return; if (n.type === 'url' && isHttp(n.url)) out.push({ label: String(n.name || n.url).slice(0, 60), url: n.url }); (n.children || []).forEach(walkB); };
+  for (const f of files) { try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); Object.values(j.roots || {}).forEach(walkB); } catch (e) {} }
+  return out;
+}
+function injectShortcuts() {
+  if (!view || view.webContents.isDestroyed()) return;
+  const list = chromeBookmarks(); if (!list.length) return;
+  const code = 'window.__setAtalhos&&window.__setAtalhos(' + JSON.stringify(list) + ')';
+  try { view.webContents.mainFrame.framesInSubtree.forEach(f => f.executeJavaScript(code).catch(() => {})); } catch (e) {}
+}
 function showJarvis() {
   if (view) { win.contentView.removeChildView(view); view = null; }
   view = new WebContentsView({ webPreferences: { partition: 'persist:jarvis', sandbox: true, contextIsolation: true } });
@@ -37,6 +54,7 @@ function showJarvis() {
   view.webContents.setWindowOpenHandler(({ url }) => { if (isHttp(url)) shell.openExternal(url); return { action: 'deny' }; });
   // mesma pagina da web (mesmo codigo, tudo funciona) quando ha link; senao a copia local do vault
   const lp = localPage();
+  view.webContents.on('did-frame-finish-load', () => { [1500, 5000].forEach(t => setTimeout(injectShortcuts, t)); });
   if (cfg.url) view.webContents.loadURL(cfg.url); else if (lp) view.webContents.loadFile(lp);
 }
 
@@ -121,7 +139,8 @@ ipcMain.on('menu', (_e, what) => {
 
 app.whenReady().then(() => {
   cfg = loadCfg();
-  if (!cfg) { cfg = defaults(); cfg.url = ''; }
+  if (!cfg) cfg = defaults();
+  if (!cfg.v || cfg.v < 2) { const d = defaults(); cfg.url = d.url; delete cfg.vault; cfg.v = d.v; saveCfg(cfg); } // v0.8: volta pro link padrao (mesma pagina da web)
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'Jarvis', submenu: [
       { label: 'Trocar endereco do Jarvis', click: () => showSetup() },

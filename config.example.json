@@ -1,5 +1,5 @@
 {
-  "url": "",
+  "url": "https://claude.ai/artifact/XQ8X6Vj5M6a5d5pDJLeJ4L",
   "buttons": [
     {
       "label": "Chrome",
@@ -101,5 +101,6 @@
       "label": "Make",
       "url": "https://www.make.com"
     }
-  ]
+  ],
+  "v": 2
 }
