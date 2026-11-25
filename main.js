@@ -1,6 +1,6 @@
 // Jarvis App: janela com um dock de botoes + a pagina do seu Jarvis.
 // Electron 32 de proposito: e a ultima versao que roda no macOS Catalina (10.15).
-const { app, BrowserWindow, WebContentsView, Menu, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog, screen } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -37,8 +37,13 @@ function showJarvis() {
 }
 
 function createWindow() {
-  win = new BrowserWindow({ width: 1280, height: 800, backgroundColor: '#05070b', title: 'Jarvis',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } });
+  // Modo area de trabalho: janela sem borda do tamanho da tela, nivel normal.
+  // Quando voce abre o Chrome ele vem por cima e o Jarvis fica atras, como fundo.
+  const d = screen.getPrimaryDisplay().workArea;
+  const desk = !cfg || cfg.desktop !== false;
+  win = new BrowserWindow(Object.assign({ width: 1280, height: 800, backgroundColor: '#05070b', title: 'Jarvis' },
+    desk ? { x: d.x, y: d.y, width: d.width, height: d.height, frame: false, resizable: false, movable: false, hasShadow: false, skipTaskbar: false } : {},
+    { webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } }));
   win.on('resize', layout);
   win.loadFile('shell.html');
   win.webContents.once('did-finish-load', () => { if (cfg && cfg.url) showJarvis(); else showSetup(); });
@@ -68,11 +73,32 @@ function launch(item) {
 ipcMain.handle('buttons', () => (cfg && cfg.buttons || []).map(b => ({ label: String(b.label || '?'), hint: String(b.hint || '') })));
 ipcMain.on('launch', (_e, i) => { const b = cfg && cfg.buttons; if (Number.isInteger(i) && b && b[i]) launch(b[i]); });
 ipcMain.on('set-url', (_e, u) => { if (!isHttp(u)) return; cfg = Object.assign(cfg || defaults(), { url: u }); saveCfg(cfg); showJarvis(); win.webContents.send('setup', false); });
+// ---- notas (vault do Obsidian) lidas direto da pasta, so leitura ----
+function walk(root, dir, out) {
+  let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+  for (const e of ents) {
+    if (e.name.startsWith('.')) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walk(root, p, out);
+    else if (e.name.toLowerCase().endsWith('.md') && out.length < 5000) out.push(path.relative(root, p));
+  }
+}
+const inVault = rel => { if (!cfg || !cfg.vault || typeof rel !== 'string') return null; const root = path.resolve(cfg.vault); const p = path.resolve(root, rel); return p.startsWith(root + path.sep) && p.toLowerCase().endsWith('.md') ? p : null; };
+ipcMain.handle('vault-info', () => ({ vault: cfg && cfg.vault ? path.basename(cfg.vault) : '' }));
+ipcMain.handle('vault-pick', async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Escolha a pasta do vault do Obsidian' });
+  if (r.canceled || !r.filePaths[0]) return false;
+  cfg = Object.assign(cfg || defaults(), { vault: r.filePaths[0] }); saveCfg(cfg); return true;
+});
+ipcMain.handle('vault-list', () => { if (!cfg || !cfg.vault) return []; const out = []; walk(cfg.vault, cfg.vault, out); return out.sort(); });
+ipcMain.handle('vault-read', (_e, rel) => { const p = inVault(rel); try { return p ? fs.readFileSync(p, 'utf8').slice(0, 200000) : ''; } catch (e) { return ''; } });
+ipcMain.on('mode', (_e, notes) => { if (view) view.setVisible(!notes); });
 ipcMain.on('menu', (_e, what) => {
   if (what === 'edit') { if (!fs.existsSync(cfgPath())) saveCfg(cfg || defaults()); shell.openPath(cfgPath()); }
   if (what === 'url') showSetup();
   if (what === 'reload' && view) view.webContents.reload();
   if (what === 'full') win.setFullScreen(!win.isFullScreen());
+  if (what === 'obsidian') { /* abre o app Obsidian de verdade */ launch({ type: 'app', target: 'Obsidian' }); }
 });
 
 app.whenReady().then(() => {

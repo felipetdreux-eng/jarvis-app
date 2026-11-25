@@ -11,15 +11,58 @@
 #setup.on{display:flex}
 #setup input{width:min(520px,90%);padding:12px 16px;border-radius:8px;border:1px solid rgba(120,170,255,.3);background:#0a0f18;color:#fff;font:14px inherit}
 #setup button{padding:10px 22px;border-radius:8px;border:1px solid #7fd0ff;background:none;color:#7fd0ff;cursor:pointer;font-size:14px}
+#notes{position:fixed;left:76px;right:0;top:0;bottom:0;display:none;background:#05070b}
+#notes.on{display:flex}
+#nl{width:300px;border-right:1px solid rgba(120,170,255,.14);display:flex;flex-direction:column}
+#nl input{margin:10px;padding:9px 12px;border-radius:8px;border:1px solid rgba(120,170,255,.3);background:#0a0f18;color:#fff;font:13px inherit}
+#nl .bar{display:flex;gap:6px;padding:0 10px 8px}#nl .bar button{flex:1;border:1px solid rgba(120,170,255,.2);background:none;color:#9fb3cc;border-radius:6px;padding:5px;font-size:11px;cursor:pointer}
+#items{overflow:auto;flex:1}
+#items div{padding:6px 12px;cursor:pointer;font-size:12px;color:#9fb3cc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#items div:hover,#items div.sel{background:rgba(120,170,255,.1);color:#fff}
+#nr{flex:1;overflow:auto;padding:28px 44px;line-height:1.65;font-size:14px;max-width:900px}
+#nr h1,#nr h2,#nr h3{letter-spacing:0;font-weight:600;color:#fff;margin:1.2em 0 .4em}#nr h1{font-size:22px}#nr h2{font-size:18px}#nr h3{font-size:15px}
+#nr code{background:#0f1622;padding:1px 5px;border-radius:4px}#nr pre{background:#0f1622;padding:12px;border-radius:8px;overflow:auto}
+#nr a.w{color:#7fd0ff;cursor:pointer;text-decoration:none}#nr li{margin:2px 0}#nr blockquote{border-left:3px solid #2a3b57;margin:0;padding-left:12px;color:#8fa2bd}
 h1{font-weight:500;letter-spacing:.3em;margin:0;font-size:15px}p{margin:0;color:#7f8fa8;max-width:520px;line-height:1.5}
 </style></head><body>
 <div id="dock"></div>
 <div id="setup"><h1>JARVIS</h1><p>Cole o endereco da pagina do seu Jarvis (https://...). Voce faz login nela uma vez e o app lembra.</p>
 <input id="u" placeholder="https://claude.ai/artifact/..." autocomplete="off"><button id="ok">Abrir</button></div>
+<div id="notes"><div id="nl"><input id="q" placeholder="buscar nota..." autocomplete="off"><div class="bar"><button id="pick">trocar pasta</button><button id="obs">abrir Obsidian</button></div><div id="items"></div></div><div id="nr"><p>Escolha uma nota.</p></div></div>
 <script>
 const dock=document.getElementById('dock');
 function mini(t,w){const b=document.createElement('button');b.className='mini';b.textContent=t;b.onclick=()=>jarvis.menu(w);return b}
+function fixed(t,f){const b=document.createElement('button');b.textContent=t;b.onclick=f;return b}
+const notes=document.getElementById('notes');let files=[];
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function inl(s){return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>').replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,(m,a,b)=>'<a class="w" data-n="'+a+'">'+(b||a)+'</a>')}
+function md(t){const out=[];let code=false,list=false;
+  for(const raw of t.replace(/^---\n[\s\S]*?\n---\n/,'').split('\n')){
+    if(raw.startsWith('```')){out.push(code?'</pre>':'<pre>');code=!code;continue}
+    if(code){out.push(esc(raw)+'\n');continue}
+    const li=raw.match(/^\s*[-*] (.*)/);
+    if(li){if(!list){out.push('<ul>');list=true}out.push('<li>'+inl(li[1])+'</li>');continue}
+    if(list){out.push('</ul>');list=false}
+    const h=raw.match(/^(#{1,3}) (.*)/);
+    if(h)out.push('<h'+h[1].length+'>'+inl(h[2])+'</h'+h[1].length+'>');
+    else if(raw.startsWith('> '))out.push('<blockquote>'+inl(raw.slice(2))+'</blockquote>');
+    else if(raw.trim())out.push('<p>'+inl(raw)+'</p>')}
+  if(list)out.push('</ul>');if(code)out.push('</pre>');return out.join('')}
+function show(rel){jarvis.vault.read(rel).then(t=>{const nr=document.getElementById('nr');nr.innerHTML=md(t);nr.scrollTop=0;
+  document.querySelectorAll('#items div').forEach(d=>d.classList.toggle('sel',d.dataset.p===rel))})}
+document.getElementById('nr').addEventListener('click',e=>{const n=e.target.dataset&&e.target.dataset.n;if(!n)return;
+  const f=files.find(x=>x.replace(/\.md$/i,'').split(/[\\/]/).pop().toLowerCase()===n.toLowerCase());if(f)show(f)});
+function draw(){const q=document.getElementById('q').value.toLowerCase();const it=document.getElementById('items');it.innerHTML='';
+  files.filter(f=>f.toLowerCase().includes(q)).slice(0,400).forEach(f=>{const d=document.createElement('div');d.textContent=f.replace(/\.md$/i,'');d.dataset.p=f;d.onclick=()=>show(f);it.appendChild(d)})}
+async function openNotes(){jarvis.mode(true);notes.classList.add('on');
+  if(!(await jarvis.vault.info()).vault){if(!(await jarvis.vault.pick())){return}}
+  files=await jarvis.vault.list();draw()}
+function closeNotes(){notes.classList.remove('on');jarvis.mode(false)}
+document.getElementById('q').oninput=draw;
+document.getElementById('pick').onclick=async()=>{if(await jarvis.vault.pick()){files=await jarvis.vault.list();draw()}};
+document.getElementById('obs').onclick=()=>jarvis.menu('obsidian');
 jarvis.buttons().then(list=>{
+  dock.append(fixed('Jarvis',closeNotes),fixed('Notas',openNotes));
   list.forEach((b,i)=>{const el=document.createElement('button');el.textContent=b.label;if(b.hint)el.title=b.hint;el.onclick=()=>jarvis.launch(i);dock.appendChild(el)});
   const sp=document.createElement('div');sp.className='sp';dock.appendChild(sp);
   dock.append(mini('editar botoes','edit'),mini('trocar link','url'),mini('recarregar','reload'),mini('tela cheia','full'));
