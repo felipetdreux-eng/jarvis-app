@@ -62,7 +62,7 @@ document.getElementById('nr').addEventListener('click',e=>{const n=e.target.data
   const f=files.find(x=>x.replace(/\.md$/i,'').split(/[\\/]/).pop().toLowerCase()===n.toLowerCase());if(f)show(f)});
 function draw(){const q=document.getElementById('q').value.toLowerCase();const it=document.getElementById('items');it.innerHTML='';
   files.filter(f=>f.toLowerCase().includes(q)).slice(0,400).forEach(f=>{const d=document.createElement('div');d.textContent=f.replace(/\.md$/i,'');d.dataset.p=f;d.onclick=()=>show(f);it.appendChild(d)})}
-async function openNotes(){jarvis.mode(true);notes.classList.add('on');
+async function openNotes(){sc.classList.remove('on');jarvis.mode(true);notes.classList.add('on');
   if(!(await jarvis.vault.info()).vault){if(!(await jarvis.vault.pick())){return}}
   files=await jarvis.vault.list();draw()}
 let sl=[];const sc=document.getElementById('sc'),sq=document.getElementById('sq');
