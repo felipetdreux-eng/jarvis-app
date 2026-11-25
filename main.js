@@ -1,6 +1,6 @@
 // Jarvis App: janela com um dock de botoes + a pagina do seu Jarvis.
 // Electron 32 de proposito: e a ultima versao que roda no macOS Catalina (10.15).
-const { app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog, screen } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog, screen, globalShortcut } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -32,19 +32,35 @@ function localPage() { if (!cfg || !cfg.vault) return null; const p = path.join(
 // ---- favoritos do Chrome (lidos do disco, so no seu computador) ----
 function chromeBookmarks() {
   const home = app.getPath('home');
-  const files = process.platform === 'darwin' ? [path.join(home, 'Library/Application Support/Google/Chrome/Default/Bookmarks')]
-    : process.platform === 'win32' ? [path.join(process.env.LOCALAPPDATA || '', 'Google/Chrome/User Data/Default/Bookmarks')]
-    : [path.join(home, '.config/google-chrome/Default/Bookmarks')];
+  const base = process.platform === 'darwin' ? path.join(home, 'Library/Application Support/Google/Chrome')
+    : process.platform === 'win32' ? path.join(process.env.LOCALAPPDATA || '', 'Google/Chrome/User Data')
+    : path.join(home, '.config/google-chrome');
+  let profs = []; try { profs = fs.readdirSync(base).filter(n => n === 'Default' || /^Profile \d+$/.test(n)); } catch (e) {}
+  const files = profs.map(n => path.join(base, n, 'Bookmarks'));
   const out = [];
   const walkB = n => { if (!n || out.length >= 400) return; if (n.type === 'url' && isHttp(n.url)) out.push({ label: String(n.name || n.url).slice(0, 60), url: n.url }); (n.children || []).forEach(walkB); };
   for (const f of files) { try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); Object.values(j.roots || {}).forEach(walkB); } catch (e) {} }
   return out;
 }
+const BTN_JS = `(function(){if(!window.__setAtalhos||document.getElementById('jv-hide'))return;var b=document.createElement('button');b.id='jv-hide';b.textContent='esconder abas';
+b.style.cssText='position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:60;padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(10,14,22,.8);color:#e9edf4;font:12px system-ui;cursor:pointer';
+var h=false;b.onclick=function(){h=!h;b.textContent=h?'mostrar abas':'esconder abas';console.log(h?'__JARVIS__hide':'__JARVIS__show')};document.body.appendChild(b)})()`;
+let injected = 0;
 function injectShortcuts() {
   if (!view || view.webContents.isDestroyed()) return;
-  const list = chromeBookmarks(); if (!list.length) return;
-  const code = 'window.__setAtalhos&&window.__setAtalhos(' + JSON.stringify(list) + ')';
-  try { view.webContents.mainFrame.framesInSubtree.forEach(f => f.executeJavaScript(code).catch(() => {})); } catch (e) {}
+  const list = chromeBookmarks();
+  const code = '(function(){' + BTN_JS + ';if(window.__setAtalhos){window.__setAtalhos(' + JSON.stringify(list) + ');return 1}return 0})()';
+  try { view.webContents.mainFrame.framesInSubtree.forEach(f => f.executeJavaScript(code).then(r => { if (r) injected++; }).catch(() => {})); } catch (e) {}
+}
+// esconder/mostrar as outras janelas (Jarvis fica na frente so quando voce quer)
+function hideOthers() {
+  if (process.platform === 'darwin') execFile('osascript', ['-e', 'tell application "System Events" to set visible of (every process whose visible is true and background only is false and name is not "Jarvis" and name is not "Electron") to false']);
+  else if (process.platform === 'win32') execFile('powershell', ['-NoProfile', '-Command', '(New-Object -ComObject Shell.Application).MinimizeAll()']);
+  if (win) win.show();
+}
+function showOthers() {
+  if (process.platform === 'darwin') execFile('osascript', ['-e', 'tell application "System Events" to set visible of (every process whose background only is false) to true']);
+  else if (process.platform === 'win32') execFile('powershell', ['-NoProfile', '-Command', '(New-Object -ComObject Shell.Application).UndoMinimizeALL()']);
 }
 function showJarvis() {
   if (view) { win.contentView.removeChildView(view); view = null; }
@@ -54,7 +70,9 @@ function showJarvis() {
   view.webContents.setWindowOpenHandler(({ url }) => { if (isHttp(url)) shell.openExternal(url); return { action: 'deny' }; });
   // mesma pagina da web (mesmo codigo, tudo funciona) quando ha link; senao a copia local do vault
   const lp = localPage();
-  view.webContents.on('did-frame-finish-load', () => { [1500, 5000].forEach(t => setTimeout(injectShortcuts, t)); });
+  view.webContents.on('did-frame-finish-load', () => { [1500, 5000, 12000, 25000].forEach(t => setTimeout(() => { if (!injected) injectShortcuts(); }, t)); });
+  injected = 0;
+  view.webContents.on('console-message', (_e, _l, msg) => { if (msg === '__JARVIS__hide') hideOthers(); else if (msg === '__JARVIS__show') showOthers(); });
   if (cfg.url) view.webContents.loadURL(cfg.url); else if (lp) view.webContents.loadFile(lp);
 }
 
@@ -147,8 +165,14 @@ app.whenReady().then(() => {
       { label: 'Editar botoes (abre config.json)', click: () => { if (!fs.existsSync(cfgPath())) saveCfg(cfg); shell.openPath(cfgPath()); } },
       { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => view && view.webContents.reload() },
       { label: 'Mostrar/esconder dock', click: () => { cfg.dock = !(cfg.dock === true); saveCfg(cfg); win.webContents.send('dock', dockW() > 0); layout(); } },
+      { label: 'Esconder minhas abas  (Cmd+Alt+H)', click: () => hideOthers() },
+      { label: 'Recarregar atalhos do Chrome', click: () => { injected = 0; injectShortcuts(); } },
       { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'quit' } ] },
     { role: 'editMenu' } ]));
   createWindow();
+  // Cmd/Ctrl+Alt+J: esconde ou mostra o Jarvis
+  globalShortcut.register('CommandOrControl+Alt+J', () => { if (!win) return; if (win.isVisible() && win.isFocused()) win.hide(); else { win.show(); win.focus(); } });
+  globalShortcut.register('CommandOrControl+Alt+H', () => { hideOthers(); });
 });
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());
