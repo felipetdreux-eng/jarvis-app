@@ -170,9 +170,24 @@ app.whenReady().then(() => {
       { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'quit' } ] },
     { role: 'editMenu' } ]));
   createWindow();
+  setTimeout(checkUpdate, 6000);
   // Cmd/Ctrl+Alt+J: esconde ou mostra o Jarvis
   globalShortcut.register('CommandOrControl+Alt+J', () => { if (!win) return; if (win.isVisible() && win.isFocused()) win.hide(); else { win.show(); win.focus(); } });
   globalShortcut.register('CommandOrControl+Alt+H', () => { hideOthers(); });
 });
+// aviso de versao nova (Mac sem assinatura nao atualiza sozinho: o app avisa e abre a pagina de download)
+async function checkUpdate() {
+  try {
+    const r = await require('electron').net.fetch('https://api.github.com/repos/felipetdreux-eng/jarvis-app/releases/latest', { headers: { 'User-Agent': 'jarvis-app' } });
+    if (!r.ok) return;
+    const j = await r.json(); const latest = String(j.tag_name || '').replace(/^v/, '');
+    const nv = s => s.split('.').map(Number); const a = nv(latest), b = nv(app.getVersion());
+    const newer = a.length === 3 && !a.some(isNaN) && (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0;
+    if (!newer || cfg.skipVersion === latest) return;
+    const x = await dialog.showMessageBox(win, { type: 'info', buttons: ['Baixar', 'Depois', 'Pular esta'], defaultId: 0, message: 'Jarvis ' + latest + ' disponivel', detail: 'Voce tem a ' + app.getVersion() + '. A pagina do Jarvis ja atualiza sozinha; so mudancas do app precisam de download.' });
+    if (x.response === 0) shell.openExternal(j.html_url);
+    else if (x.response === 2) { cfg.skipVersion = latest; saveCfg(cfg); }
+  } catch (e) {}
+}
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => app.quit());
