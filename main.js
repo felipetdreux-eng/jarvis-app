@@ -65,8 +65,8 @@ function openUrls(urls, browser) {
   } else list.forEach(u => shell.openExternal(u));
 }
 // Janelinha de perguntas: Chrome em modo app (pequeno), usa o login do seu Chrome
-function ask() {
-  const url = isHttp(cfg && cfg.askUrl) ? cfg.askUrl : 'https://claude.ai/new';
+function ask(which) {
+  const url = which === 'usage' ? (isHttp(cfg && cfg.usageUrl) ? cfg.usageUrl : 'https://claude.ai/settings/usage') : (isHttp(cfg && cfg.askUrl) ? cfg.askUrl : 'https://claude.ai/new');
   const a = ['--app=' + url, '--window-size=440,720', '--window-position=40,60'];
   if (process.platform === 'darwin') execFile('open', ['-na', 'Google Chrome', '--args', ...a], err => { if (err) shell.openExternal(url); });
   else if (process.platform === 'win32') execFile('cmd', ['/c', 'start', '', 'chrome', ...a], err => { if (err) shell.openExternal(url); });
@@ -108,7 +108,7 @@ ipcMain.handle('vault-read', (_e, rel) => { const p = inVault(rel); try { return
 const shortcuts = () => (cfg && Array.isArray(cfg.shortcuts) ? cfg.shortcuts : defaults().shortcuts || []).filter(s => s && isHttp(s.url));
 ipcMain.handle('shortcuts', () => shortcuts().map(s => ({ label: String(s.label || s.url), host: new URL(s.url).host })));
 ipcMain.on('open-shortcut', (_e, i) => { const s = shortcuts()[i]; if (Number.isInteger(i) && s) openUrls([s.url], 'chrome'); });
-ipcMain.on('ask', () => ask());
+ipcMain.on('ask', (_e, w) => ask(w === 'usage' ? 'usage' : ''));
 ipcMain.on('mode', (_e, notes) => { if (view) view.setVisible(!notes); });
 ipcMain.on('menu', (_e, what) => {
   if (what === 'edit') { if (!fs.existsSync(cfgPath())) saveCfg(cfg || defaults()); shell.openPath(cfgPath()); }
