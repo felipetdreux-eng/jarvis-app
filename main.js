@@ -27,13 +27,16 @@ function layout() {
   view.setBounds({ x: DOCK, y: 0, width: Math.max(0, w - DOCK), height: h });
 }
 
+// Pagina local: <vault>/Horizonte/parede.html (a mesma do navegador, roda sem internet)
+function localPage() { if (!cfg || !cfg.vault) return null; const p = path.join(cfg.vault, 'Horizonte', 'parede.html'); return fs.existsSync(p) ? p : null; }
 function showJarvis() {
   if (view) { win.contentView.removeChildView(view); view = null; }
   view = new WebContentsView({ webPreferences: { partition: 'persist:jarvis', sandbox: true, contextIsolation: true } });
   win.contentView.addChildView(view);
   layout();
   view.webContents.setWindowOpenHandler(({ url }) => { if (isHttp(url)) shell.openExternal(url); return { action: 'deny' }; });
-  view.webContents.loadURL(cfg.url);
+  const lp = localPage();
+  if (lp) view.webContents.loadFile(lp); else view.webContents.loadURL(cfg.url);
 }
 
 function createWindow() {
@@ -46,7 +49,7 @@ function createWindow() {
     { webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } }));
   win.on('resize', layout);
   win.loadFile('shell.html');
-  win.webContents.once('did-finish-load', () => { if (cfg && cfg.url) showJarvis(); else showSetup(); });
+  win.webContents.once('did-finish-load', () => { if (cfg && (cfg.url || localPage())) showJarvis(); else showSetup(); });
 }
 function showSetup() { if (view) { win.contentView.removeChildView(view); view = null; } win.webContents.send('setup', true); }
 
@@ -88,7 +91,9 @@ ipcMain.handle('vault-info', () => ({ vault: cfg && cfg.vault ? path.basename(cf
 ipcMain.handle('vault-pick', async () => {
   const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Escolha a pasta do vault do Obsidian' });
   if (r.canceled || !r.filePaths[0]) return false;
-  cfg = Object.assign(cfg || defaults(), { vault: r.filePaths[0] }); saveCfg(cfg); return true;
+  cfg = Object.assign(cfg || defaults(), { vault: r.filePaths[0] }); saveCfg(cfg);
+  if (localPage()) { showJarvis(); win.webContents.send('setup', false); }
+  return true;
 });
 ipcMain.handle('vault-list', () => { if (!cfg || !cfg.vault) return []; const out = []; walk(cfg.vault, cfg.vault, out); return out.sort(); });
 ipcMain.handle('vault-read', (_e, rel) => { const p = inVault(rel); try { return p ? fs.readFileSync(p, 'utf8').slice(0, 200000) : ''; } catch (e) { return ''; } });

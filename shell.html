@@ -27,7 +27,7 @@ h1{font-weight:500;letter-spacing:.3em;margin:0;font-size:15px}p{margin:0;color:
 </style></head><body>
 <div id="dock"></div>
 <div id="setup"><h1>JARVIS</h1><p>Cole o endereco da pagina do seu Jarvis (https://...). Voce faz login nela uma vez e o app lembra.</p>
-<input id="u" placeholder="https://claude.ai/artifact/..." autocomplete="off"><button id="ok">Abrir</button></div>
+<input id="u" placeholder="https://claude.ai/artifact/..." autocomplete="off"><button id="ok">Abrir</button><p>ou, se o vault do Obsidian ja esta nesta maquina:</p><button id="lv">Usar pasta do vault (pagina local)</button></div>
 <div id="notes"><div id="nl"><input id="q" placeholder="buscar nota..." autocomplete="off"><div class="bar"><button id="pick">trocar pasta</button><button id="obs">abrir Obsidian</button></div><div id="items"></div></div><div id="nr"><p>Escolha uma nota.</p></div></div>
 <script>
 const dock=document.getElementById('dock');
@@ -71,5 +71,6 @@ const s=document.getElementById('setup');
 jarvis.onSetup(on=>s.classList.toggle('on',!!on));
 function go(){const v=document.getElementById('u').value.trim();if(/^https?:\/\//i.test(v))jarvis.setUrl(v)}
 document.getElementById('ok').onclick=go;
+document.getElementById('lv').onclick=()=>jarvis.vault.pick();
 document.getElementById('u').addEventListener('keydown',e=>{if(e.key==='Enter')go()});
 </script></body></html>
