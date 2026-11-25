@@ -1,8 +1,105 @@
 {
   "url": "",
   "buttons": [
-    { "label": "Chrome", "hint": "Abre o Chrome", "type": "app", "target": "Google Chrome" },
-    { "label": "Projeto exemplo", "hint": "Abre varias abas de uma vez", "type": "urls", "browser": "chrome", "urls": ["https://github.com", "https://claude.ai"] },
-    { "label": "Obsidian", "hint": "Abre o Obsidian", "type": "app", "target": "Obsidian" }
+    {
+      "label": "Chrome",
+      "hint": "Abre o Chrome",
+      "type": "app",
+      "target": "Google Chrome"
+    },
+    {
+      "label": "Projeto exemplo",
+      "hint": "Abre varias abas de uma vez",
+      "type": "urls",
+      "browser": "chrome",
+      "urls": [
+        "https://github.com",
+        "https://claude.ai"
+      ]
+    },
+    {
+      "label": "Obsidian",
+      "hint": "Abre o Obsidian",
+      "type": "app",
+      "target": "Obsidian"
+    }
+  ],
+  "shortcuts": [
+    {
+      "label": "Claude",
+      "url": "https://claude.ai"
+    },
+    {
+      "label": "ChatGPT",
+      "url": "https://chatgpt.com"
+    },
+    {
+      "label": "Instagram",
+      "url": "https://www.instagram.com"
+    },
+    {
+      "label": "TikTok",
+      "url": "https://www.tiktok.com"
+    },
+    {
+      "label": "WhatsApp Web",
+      "url": "https://web.whatsapp.com"
+    },
+    {
+      "label": "YouTube",
+      "url": "https://www.youtube.com"
+    },
+    {
+      "label": "Gmail",
+      "url": "https://mail.google.com"
+    },
+    {
+      "label": "Google Drive",
+      "url": "https://drive.google.com"
+    },
+    {
+      "label": "GitHub",
+      "url": "https://github.com"
+    },
+    {
+      "label": "Vercel",
+      "url": "https://vercel.com/dashboard"
+    },
+    {
+      "label": "Lovable",
+      "url": "https://lovable.dev"
+    },
+    {
+      "label": "Bolt",
+      "url": "https://bolt.new"
+    },
+    {
+      "label": "Replit",
+      "url": "https://replit.com"
+    },
+    {
+      "label": "ElevenLabs",
+      "url": "https://elevenlabs.io"
+    },
+    {
+      "label": "Kiwify",
+      "url": "https://dashboard.kiwify.com.br"
+    },
+    {
+      "label": "Notion",
+      "url": "https://www.notion.so"
+    },
+    {
+      "label": "CapCut",
+      "url": "https://www.capcut.com"
+    },
+    {
+      "label": "Mercado Pago",
+      "url": "https://www.mercadopago.com.br"
+    },
+    {
+      "label": "Make",
+      "url": "https://www.make.com"
+    }
   ]
 }

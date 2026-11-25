@@ -23,12 +23,20 @@
 #nr h1,#nr h2,#nr h3{letter-spacing:0;font-weight:600;color:#fff;margin:1.2em 0 .4em}#nr h1{font-size:22px}#nr h2{font-size:18px}#nr h3{font-size:15px}
 #nr code{background:#0f1622;padding:1px 5px;border-radius:4px}#nr pre{background:#0f1622;padding:12px;border-radius:8px;overflow:auto}
 #nr a.w{color:#7fd0ff;cursor:pointer;text-decoration:none}#nr li{margin:2px 0}#nr blockquote{border-left:3px solid #2a3b57;margin:0;padding-left:12px;color:#8fa2bd}
+#sc{position:fixed;left:76px;right:0;top:0;bottom:0;display:none;flex-direction:column;align-items:center;background:#05070b;padding:40px 24px;overflow:auto}
+#sc.on{display:flex}
+#sc input{width:min(560px,92%);padding:14px 18px;border-radius:10px;border:1px solid rgba(120,170,255,.3);background:#0a0f18;color:#fff;font:15px inherit;margin-bottom:22px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;width:min(900px,100%)}
+#grid div{border:1px solid rgba(120,170,255,.18);background:rgba(120,170,255,.04);border-radius:10px;padding:14px 12px;cursor:pointer}
+#grid div:hover,#grid div.f{border-color:#7fd0ff;background:rgba(127,208,255,.1)}
+#grid b{display:block;font-weight:500;color:#fff;font-size:13px}#grid span{font-size:10px;color:#7f8fa8}
 h1{font-weight:500;letter-spacing:.3em;margin:0;font-size:15px}p{margin:0;color:#7f8fa8;max-width:520px;line-height:1.5}
 </style></head><body>
 <div id="dock"></div>
 <div id="setup"><h1>JARVIS</h1><p>Cole o endereco da pagina do seu Jarvis (https://...). Voce faz login nela uma vez e o app lembra.</p>
 <input id="u" placeholder="https://claude.ai/artifact/..." autocomplete="off"><button id="ok">Abrir</button><p>ou, se o vault do Obsidian ja esta nesta maquina:</p><button id="lv">Usar pasta do vault (pagina local)</button></div>
 <div id="notes"><div id="nl"><input id="q" placeholder="buscar nota..." autocomplete="off"><div class="bar"><button id="pick">trocar pasta</button><button id="obs">abrir Obsidian</button></div><div id="items"></div></div><div id="nr"><p>Escolha uma nota.</p></div></div>
+<div id="sc"><input id="sq" placeholder="buscar atalho... (Enter abre o primeiro)" autocomplete="off"><div id="grid"></div></div>
 <script>
 const dock=document.getElementById('dock');
 function mini(t,w){const b=document.createElement('button');b.className='mini';b.textContent=t;b.onclick=()=>jarvis.menu(w);return b}
@@ -57,12 +65,19 @@ function draw(){const q=document.getElementById('q').value.toLowerCase();const i
 async function openNotes(){jarvis.mode(true);notes.classList.add('on');
   if(!(await jarvis.vault.info()).vault){if(!(await jarvis.vault.pick())){return}}
   files=await jarvis.vault.list();draw()}
-function closeNotes(){notes.classList.remove('on');jarvis.mode(false)}
+let sl=[];const sc=document.getElementById('sc'),sq=document.getElementById('sq');
+function drawSc(){const q=sq.value.toLowerCase().trim();const g=document.getElementById('grid');g.innerHTML='';let first=true;
+  sl.forEach((s,i)=>{if(q&&!(s.label+' '+s.host).toLowerCase().includes(q))return;const d=document.createElement('div');if(first&&q){d.className='f';first=false}d.dataset.i=i;
+    d.innerHTML='<b></b><span></span>';d.firstChild.textContent=s.label;d.lastChild.textContent=s.host;d.onclick=()=>jarvis.openShortcut(i);g.appendChild(d)})}
+async function openSc(){closeNotes();jarvis.mode(true);sc.classList.add('on');sl=await jarvis.shortcuts();sq.value='';drawSc();sq.focus()}
+sq.oninput=drawSc;sq.addEventListener('keydown',e=>{if(e.key==='Enter'){const f=document.querySelector('#grid div');if(f)jarvis.openShortcut(+f.dataset.i)}if(e.key==='Escape')closeNotes()});
+document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openSc()}});
+function closeNotes(){sc.classList.remove('on');notes.classList.remove('on');jarvis.mode(false)}
 document.getElementById('q').oninput=draw;
 document.getElementById('pick').onclick=async()=>{if(await jarvis.vault.pick()){files=await jarvis.vault.list();draw()}};
 document.getElementById('obs').onclick=()=>jarvis.menu('obsidian');
 jarvis.buttons().then(list=>{
-  dock.append(fixed('Jarvis',closeNotes),fixed('Perguntar',()=>jarvis.ask()),fixed('Notas',openNotes));
+  dock.append(fixed('Jarvis',closeNotes),fixed('Perguntar',()=>jarvis.ask()),fixed('Atalhos',openSc),fixed('Notas',openNotes));
   list.forEach((b,i)=>{const el=document.createElement('button');el.textContent=b.label;if(b.hint)el.title=b.hint;el.onclick=()=>jarvis.launch(i);dock.appendChild(el)});
   const sp=document.createElement('div');sp.className='sp';dock.appendChild(sp);
   dock.append(mini('editar botoes','edit'),mini('trocar link','url'),mini('recarregar','reload'),mini('tela cheia','full'));

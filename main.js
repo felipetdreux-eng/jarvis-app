@@ -105,6 +105,9 @@ ipcMain.handle('vault-pick', async () => {
 });
 ipcMain.handle('vault-list', () => { if (!cfg || !cfg.vault) return []; const out = []; walk(cfg.vault, cfg.vault, out); return out.sort(); });
 ipcMain.handle('vault-read', (_e, rel) => { const p = inVault(rel); try { return p ? fs.readFileSync(p, 'utf8').slice(0, 200000) : ''; } catch (e) { return ''; } });
+const shortcuts = () => (cfg && Array.isArray(cfg.shortcuts) ? cfg.shortcuts : defaults().shortcuts || []).filter(s => s && isHttp(s.url));
+ipcMain.handle('shortcuts', () => shortcuts().map(s => ({ label: String(s.label || s.url), host: new URL(s.url).host })));
+ipcMain.on('open-shortcut', (_e, i) => { const s = shortcuts()[i]; if (Number.isInteger(i) && s) openUrls([s.url], 'chrome'); });
 ipcMain.on('ask', () => ask());
 ipcMain.on('mode', (_e, notes) => { if (view) view.setVisible(!notes); });
 ipcMain.on('menu', (_e, what) => {
