@@ -62,7 +62,7 @@ document.getElementById('q').oninput=draw;
 document.getElementById('pick').onclick=async()=>{if(await jarvis.vault.pick()){files=await jarvis.vault.list();draw()}};
 document.getElementById('obs').onclick=()=>jarvis.menu('obsidian');
 jarvis.buttons().then(list=>{
-  dock.append(fixed('Jarvis',closeNotes),fixed('Notas',openNotes));
+  dock.append(fixed('Jarvis',closeNotes),fixed('Perguntar',()=>jarvis.ask()),fixed('Notas',openNotes));
   list.forEach((b,i)=>{const el=document.createElement('button');el.textContent=b.label;if(b.hint)el.title=b.hint;el.onclick=()=>jarvis.launch(i);dock.appendChild(el)});
   const sp=document.createElement('div');sp.className='sp';dock.appendChild(sp);
   dock.append(mini('editar botoes','edit'),mini('trocar link','url'),mini('recarregar','reload'),mini('tela cheia','full'));

@@ -64,6 +64,14 @@ function openUrls(urls, browser) {
     execFile('cmd', ['/c', 'start', '', 'chrome', ...list], err => { if (err) list.forEach(u => shell.openExternal(u)); });
   } else list.forEach(u => shell.openExternal(u));
 }
+// Janelinha de perguntas: Chrome em modo app (pequeno), usa o login do seu Chrome
+function ask() {
+  const url = isHttp(cfg && cfg.askUrl) ? cfg.askUrl : 'https://claude.ai/new';
+  const a = ['--app=' + url, '--window-size=440,720', '--window-position=40,60'];
+  if (process.platform === 'darwin') execFile('open', ['-na', 'Google Chrome', '--args', ...a], err => { if (err) shell.openExternal(url); });
+  else if (process.platform === 'win32') execFile('cmd', ['/c', 'start', '', 'chrome', ...a], err => { if (err) shell.openExternal(url); });
+  else shell.openExternal(url);
+}
 function launch(item) {
   if (!item) return;
   if (item.type === 'urls') openUrls(item.urls, item.browser);
@@ -97,6 +105,7 @@ ipcMain.handle('vault-pick', async () => {
 });
 ipcMain.handle('vault-list', () => { if (!cfg || !cfg.vault) return []; const out = []; walk(cfg.vault, cfg.vault, out); return out.sort(); });
 ipcMain.handle('vault-read', (_e, rel) => { const p = inVault(rel); try { return p ? fs.readFileSync(p, 'utf8').slice(0, 200000) : ''; } catch (e) { return ''; } });
+ipcMain.on('ask', () => ask());
 ipcMain.on('mode', (_e, notes) => { if (view) view.setVisible(!notes); });
 ipcMain.on('menu', (_e, what) => {
   if (what === 'edit') { if (!fs.existsSync(cfgPath())) saveCfg(cfg || defaults()); shell.openPath(cfgPath()); }
