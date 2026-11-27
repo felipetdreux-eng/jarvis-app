@@ -1,0 +1,27 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Jarvis</title><style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#06080c;color:#e9edf4;font:14px -apple-system,Segoe UI,Roboto,sans-serif}
+body{display:flex;flex-direction:column}
+#log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.m{max-width:88%;padding:10px 13px;border-radius:12px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.u{align-self:flex-end;background:#12303d}.a{align-self:flex-start;background:#121722;border:1px solid rgba(255,255,255,.08)}.s{align-self:center;color:#7d8596;font-size:12px}
+#f{display:flex;gap:8px;padding:12px;border-top:1px solid rgba(255,255,255,.08)}
+#i{flex:1;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0b0f17;color:#fff;font:14px inherit;outline:none}
+#i:focus{border-color:#7fe3ff}button{border:1px solid #7fe3ff;background:none;color:#7fe3ff;border-radius:10px;padding:0 16px;font:13px inherit;cursor:pointer}
+#k{display:none;padding:22px;gap:12px;flex-direction:column}#k.on{display:flex}#k input{padding:11px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#0b0f17;color:#fff;font:13px inherit}
+#k p{margin:0;color:#9aa4b5;line-height:1.5;font-size:13px}#k button{padding:10px}
+</style></head><body>
+<div id="k"><p><b>Cerebro do Jarvis (gratis)</b><br>Crie uma chave no Google AI Studio (aistudio.google.com, entre com sua conta Google, "Get API key"). Cole aqui. Ela fica so no seu computador.</p>
+<input id="kv" type="password" placeholder="cole a chave" autocomplete="off"><button id="ks">salvar</button></div>
+<div id="log"></div>
+<form id="f"><input id="i" placeholder="o que voce quer que eu faca?" autocomplete="off"><button>enviar</button></form>
+<script>
+const log=document.getElementById('log'),i=document.getElementById('i'),k=document.getElementById('k');
+function add(c,t){const d=document.createElement('div');d.className='m '+c;d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
+async function init(){if(!(await jarvis.chatHasKey())){k.classList.add('on');document.getElementById('f').style.display='none'}else add('s','Pronto. Peça: "abre o projeto Agenda24", "abre instagram e whatsapp", "o que tenho nas notas sobre Fuply?"')}
+document.getElementById('ks').onclick=async()=>{const v=document.getElementById('kv').value.trim();if(v.length<20)return;await jarvis.chatSetKey(v);k.classList.remove('on');document.getElementById('f').style.display='flex';log.innerHTML='';init()};
+document.getElementById('f').onsubmit=async e=>{e.preventDefault();const t=i.value.trim();if(!t)return;i.value='';add('u',t);const w=add('a','...');
+  try{w.textContent=await jarvis.chatSend(t)}catch(x){w.textContent='Erro: '+(x&&x.message||x)}log.scrollTop=log.scrollHeight};
+init();
+</script></body></html>

@@ -1,6 +1,6 @@
 // Jarvis App: janela com um dock de botoes + a pagina do seu Jarvis.
 // Electron 32 de proposito: e a ultima versao que roda no macOS Catalina (10.15).
-const { app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog, screen, globalShortcut } = require('electron');
+const { net, app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog, screen, globalShortcut, safeStorage } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -44,7 +44,8 @@ function chromeBookmarks() {
 }
 const BTN_JS = `(function(){if(!window.__setAtalhos||document.getElementById('jv-hide'))return;var b=document.createElement('button');b.id='jv-hide';b.textContent='esconder abas';
 b.style.cssText='position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:60;padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(10,14,22,.8);color:#e9edf4;font:12px system-ui;cursor:pointer';
-var h=false;b.onclick=function(){h=!h;b.textContent=h?'mostrar abas':'esconder abas';console.log(h?'__JARVIS__hide':'__JARVIS__show')};document.body.appendChild(b)})()`;
+var h=false;b.onclick=function(){h=!h;b.textContent=h?'mostrar abas':'esconder abas';console.log(h?'__JARVIS__hide':'__JARVIS__show')};document.body.appendChild(b);
+var c=document.createElement('button');c.textContent='conversar com o Jarvis';c.style.cssText=b.style.cssText;c.style.left='calc(50% + 100px)';b.style.left='calc(50% - 100px)';c.onclick=function(){console.log('__JARVIS__chat')};c.id='jv-chat';document.body.appendChild(c)})()`;
 let injected = 0;
 function injectShortcuts() {
   if (!view || view.webContents.isDestroyed()) return;
@@ -72,7 +73,7 @@ function showJarvis() {
   const lp = localPage();
   view.webContents.on('did-frame-finish-load', () => { [1500, 5000, 12000, 25000].forEach(t => setTimeout(() => { if (!injected) injectShortcuts(); }, t)); });
   injected = 0;
-  view.webContents.on('console-message', (_e, _l, msg) => { if (msg === '__JARVIS__hide') hideOthers(); else if (msg === '__JARVIS__show') showOthers(); });
+  view.webContents.on('console-message', (_e, _l, msg) => { if (msg === '__JARVIS__hide') hideOthers(); else if (msg === '__JARVIS__show') showOthers(); else if (msg === '__JARVIS__chat') openChat(); });
   if (cfg.url) view.webContents.loadURL(cfg.url); else if (lp) view.webContents.loadFile(lp);
 }
 
@@ -121,6 +122,50 @@ function launch(item) {
 ipcMain.handle('buttons', () => (cfg && cfg.buttons || []).map(b => ({ label: String(b.label || '?'), hint: String(b.hint || '') })));
 ipcMain.on('launch', (_e, i) => { const b = cfg && cfg.buttons; if (Number.isInteger(i) && b && b[i]) launch(b[i]); });
 ipcMain.on('set-url', (_e, u) => { if (!isHttp(u)) return; cfg = Object.assign(cfg || defaults(), { url: u }); saveCfg(cfg); showJarvis(); win.webContents.send('setup', false); });
+// ---- chat do Jarvis (cerebro gratis: Gemini). A chave fica so aqui, a pagina nunca ve ----
+let chatWin = null, history = [];
+const GEM = 'gemini-2.5-flash';
+const getKey = () => { try { if (cfg.geminiKey && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(cfg.geminiKey, 'base64')); } catch (e) {} return sessionKey; };
+let sessionKey = '';
+ipcMain.handle('chat-has-key', () => !!getKey());
+ipcMain.handle('chat-set-key', (_e, k) => { if (typeof k !== 'string' || k.length < 20) return false; sessionKey = k;
+  try { if (safeStorage.isEncryptionAvailable()) { cfg.geminiKey = safeStorage.encryptString(k).toString('base64'); saveCfg(cfg); } } catch (e) {} return true; });
+const TOOLS = [{ functionDeclarations: [
+  { name: 'abrir_sites', description: 'Abre sites (https) no Chrome do usuario.', parameters: { type: 'OBJECT', properties: { urls: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['urls'] } },
+  { name: 'abrir_atalho', description: 'Abre um atalho da lista do usuario pelo nome (ex: Instagram, GitHub).', parameters: { type: 'OBJECT', properties: { nome: { type: 'STRING' } }, required: ['nome'] } },
+  { name: 'buscar_notas', description: 'Busca nas notas do vault do usuario por palavra e devolve trechos.', parameters: { type: 'OBJECT', properties: { termo: { type: 'STRING' } }, required: ['termo'] } }
+] }];
+function runTool(name, a) {
+  if (name === 'abrir_sites') { const l = (a.urls || []).filter(isHttp).slice(0, 8); openUrls(l, 'chrome'); return { aberto: l }; }
+  if (name === 'abrir_atalho') { const n = String(a.nome || '').toLowerCase(); const s = shortcuts().concat(chromeBookmarks()).find(x => String(x.label).toLowerCase().includes(n)); if (!s) return { erro: 'atalho nao encontrado' }; openUrls([s.url], 'chrome'); return { aberto: s.url }; }
+  if (name === 'buscar_notas') { if (!cfg.vault) return { erro: 'vault nao escolhido' }; const out = []; walk(cfg.vault, cfg.vault, out); const t = String(a.termo || '').toLowerCase(); const hit = [];
+    for (const rel of out) { if (hit.length >= 5) break; try { const tx = fs.readFileSync(path.join(cfg.vault, rel), 'utf8'); const ix = tx.toLowerCase().indexOf(t); if (ix >= 0 || rel.toLowerCase().includes(t)) hit.push({ nota: rel, trecho: tx.slice(Math.max(0, ix - 100), ix + 400) }); } catch (e) {} } return { resultados: hit }; }
+  return { erro: 'ferramenta desconhecida' };
+}
+const SYS = 'Voce e o Jarvis, assistente pessoal do Felipe (18 anos, Rio de Janeiro). Responda em portugues do Brasil, frases curtas, palavras simples, direto, sem enfeite. Use as ferramentas para abrir sites e buscar notas quando ele pedir. Se nao souber, diga que nao sabe. Nao invente que fez algo que nao fez. Voce NAO consegue postar, clicar em paginas nem editar arquivos; diga isso se pedirem.';
+ipcMain.handle('chat-send', async (_e, text) => {
+  const key = getKey(); if (!key) throw new Error('sem chave');
+  history.push({ role: 'user', parts: [{ text: String(text).slice(0, 4000) }] }); history = history.slice(-30);
+  for (let n = 0; n < 5; n++) {
+    const r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + GEM + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ systemInstruction: { parts: [{ text: SYS }] }, contents: history, tools: TOOLS }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error((j.error && j.error.message || r.status).toString().slice(0, 200));
+    const parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
+    history.push({ role: 'model', parts: parts.length ? parts : [{ text: '' }] });
+    const calls = parts.filter(p => p.functionCall);
+    if (!calls.length) return parts.map(p => p.text || '').join('').trim() || '(sem resposta)';
+    history.push({ role: 'user', parts: calls.map(p => ({ functionResponse: { name: p.functionCall.name, response: runTool(p.functionCall.name, p.functionCall.args || {}) } })) });
+  }
+  return 'Parei apos varias tentativas. Tente de novo.';
+});
+function openChat() {
+  if (chatWin && !chatWin.isDestroyed()) { chatWin.show(); chatWin.focus(); return; }
+  chatWin = new BrowserWindow({ width: 440, height: 720, x: 40, y: 60, title: 'Jarvis', backgroundColor: '#06080c', alwaysOnTop: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } });
+  chatWin.setMenuBarVisibility(false); chatWin.loadFile('chat.html');
+}
+ipcMain.on('open-chat', () => openChat());
 // ---- notas (vault do Obsidian) lidas direto da pasta, so leitura ----
 function walk(root, dir, out) {
   let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
@@ -173,6 +218,7 @@ app.whenReady().then(() => {
   setTimeout(checkUpdate, 6000);
   // Cmd/Ctrl+Alt+J: esconde ou mostra o Jarvis
   globalShortcut.register('CommandOrControl+Alt+J', () => { if (!win) return; if (win.isVisible() && win.isFocused()) win.hide(); else { win.show(); win.focus(); } });
+  globalShortcut.register('CommandOrControl+Alt+K', () => openChat());
   globalShortcut.register('CommandOrControl+Alt+H', () => { hideOthers(); });
 });
 // aviso de versao nova (Mac sem assinatura nao atualiza sozinho: o app avisa e abre a pagina de download)
