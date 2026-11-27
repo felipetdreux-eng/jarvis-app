@@ -74,7 +74,7 @@ function showJarvis() {
   view.webContents.on('did-frame-finish-load', () => { [1500, 5000, 12000, 25000].forEach(t => setTimeout(() => { if (!injected) injectShortcuts(); }, t)); });
   injected = 0;
   view.webContents.on('console-message', (_e, _l, msg) => { if (msg === '__JARVIS__hide') hideOthers(); else if (msg === '__JARVIS__show') showOthers(); else if (msg === '__JARVIS__chat') openChat(); });
-  if (cfg.url) view.webContents.loadURL(cfg.url); else if (lp) view.webContents.loadFile(lp);
+  if (lp) view.webContents.loadFile(lp); else if (cfg.url) view.webContents.loadURL(cfg.url);
 }
 
 function createWindow() {
@@ -230,6 +230,7 @@ ipcMain.on('menu', (_e, what) => {
 app.whenReady().then(() => {
   cfg = loadCfg();
   if (!cfg) cfg = defaults();
+  if (cfg.v === 2) { delete cfg.url; cfg.v = 3; saveCfg(cfg); } // v0.13: pagina local do vault em vez do preview do Claude
   if (!cfg.v || cfg.v < 2) { const d = defaults(); cfg.url = d.url; delete cfg.vault; cfg.v = d.v; saveCfg(cfg); } // v0.8: volta pro link padrao (mesma pagina da web)
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'Jarvis', submenu: [
