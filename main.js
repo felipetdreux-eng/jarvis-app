@@ -28,6 +28,12 @@ function layout() {
 }
 
 // Pagina local: <vault>/Horizonte/parede.html (a mesma do navegador, roda sem internet)
+let stamp = '';
+function stampLabel() { return 'Jarvis ' + app.getVersion() + (stamp ? ' · ' + stamp : ''); }
+function setStamp(lp) {
+  try { const st = fs.statSync(lp); const d = st.mtime; stamp = 'interface de ' + String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' (' + path.basename(cfg.vault) + ')'; } catch (e) { stamp = ''; }
+  buildMenu();
+}
 function localPage() { if (!cfg || !cfg.vault) return null; const p = path.join(cfg.vault, 'Horizonte', 'parede.html'); return fs.existsSync(p) ? p : null; }
 // ---- favoritos do Chrome (lidos do disco, so no seu computador) ----
 function chromeBookmarks() {
@@ -74,7 +80,10 @@ function showJarvis() {
   view.webContents.on('did-frame-finish-load', () => { [1500, 5000, 12000, 25000].forEach(t => setTimeout(() => { if (!injected) injectShortcuts(); }, t)); });
   injected = 0;
   view.webContents.on('console-message', (_e, _l, msg) => { if (msg === '__JARVIS__hide') hideOthers(); else if (msg === '__JARVIS__show') showOthers(); else if (msg === '__JARVIS__chat') openChat(); });
-  if (lp) view.webContents.loadFile(lp); else if (cfg.url) view.webContents.loadURL(cfg.url);
+  if (lp) {
+    const go = () => { setStamp(lp); view.webContents.loadFile(lp); };
+    if (fs.existsSync(path.join(cfg.vault, '.git'))) require('child_process').execFile('git', ['-C', cfg.vault, 'pull', '--ff-only'], { timeout: 15000 }, () => go()); else go();
+  } else if (cfg.url) view.webContents.loadURL(cfg.url);
 }
 
 function createWindow() {
@@ -232,8 +241,18 @@ app.whenReady().then(() => {
   if (!cfg) cfg = defaults();
   if (cfg.v === 2) { delete cfg.url; cfg.v = 3; saveCfg(cfg); } // v0.13: pagina local do vault em vez do preview do Claude
   if (!cfg.v || cfg.v < 2) { const d = defaults(); cfg.url = d.url; delete cfg.vault; cfg.v = d.v; saveCfg(cfg); } // v0.8: volta pro link padrao (mesma pagina da web)
+  buildMenu();
+  createWindow();
+  setTimeout(checkUpdate, 6000);
+  // Cmd/Ctrl+Alt+J: esconde ou mostra o Jarvis
+  globalShortcut.register('CommandOrControl+Alt+J', () => { if (!win) return; if (win.isVisible() && win.isFocused()) win.hide(); else { win.show(); win.focus(); } });
+  globalShortcut.register('CommandOrControl+Alt+K', () => openChat());
+  globalShortcut.register('CommandOrControl+Alt+H', () => { hideOthers(); });
+});
+function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: 'Jarvis', submenu: [
+      { label: stampLabel(), enabled: false }, { type: 'separator' },
       { label: 'Trocar endereco do Jarvis', click: () => showSetup() },
       { label: 'Editar botoes (abre config.json)', click: () => { if (!fs.existsSync(cfgPath())) saveCfg(cfg); shell.openPath(cfgPath()); } },
       { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => view && view.webContents.reload() },
@@ -242,13 +261,7 @@ app.whenReady().then(() => {
       { label: 'Recarregar atalhos do Chrome', click: () => { injected = 0; injectShortcuts(); } },
       { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'quit' } ] },
     { role: 'editMenu' } ]));
-  createWindow();
-  setTimeout(checkUpdate, 6000);
-  // Cmd/Ctrl+Alt+J: esconde ou mostra o Jarvis
-  globalShortcut.register('CommandOrControl+Alt+J', () => { if (!win) return; if (win.isVisible() && win.isFocused()) win.hide(); else { win.show(); win.focus(); } });
-  globalShortcut.register('CommandOrControl+Alt+K', () => openChat());
-  globalShortcut.register('CommandOrControl+Alt+H', () => { hideOthers(); });
-});
+}
 // aviso de versao nova (Mac sem assinatura nao atualiza sozinho: o app avisa e abre a pagina de download)
 async function checkUpdate() {
   try {
