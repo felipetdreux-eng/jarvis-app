@@ -1,6 +1,6 @@
 {
   "name": "jarvis-app",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Abre a pagina do seu Jarvis na area de trabalho e lanca abas e programas.",
   "main": "main.js",
   "author": "Felipe",
@@ -17,9 +17,34 @@
   "build": {
     "appId": "app.jarvis.desktop",
     "productName": "Jarvis",
-    "files": ["main.js", "preload.js", "shell.html","chat.html", "config.example.json", "package.json"],
-    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.productivity", "minimumSystemVersion": "10.15.0", "identity": null },
-    "win": { "target": ["nsis"] },
-    "nsis": { "oneClick": true, "perMachine": false }
+    "files": [
+      "main.js",
+      "preload.js",
+      "shell.html",
+      "chat.html",
+      "config.example.json",
+      "package.json"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity",
+      "minimumSystemVersion": "10.15.0",
+      "identity": null,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "O Jarvis usa o microfone para voce falar com ele."
+      }
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
   }
 }

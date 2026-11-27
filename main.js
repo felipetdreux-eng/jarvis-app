@@ -1,6 +1,6 @@
 // Jarvis App: janela com um dock de botoes + a pagina do seu Jarvis.
 // Electron 32 de proposito: e a ultima versao que roda no macOS Catalina (10.15).
-const { net, app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog, screen, globalShortcut, safeStorage } = require('electron');
+const { net, app, BrowserWindow, WebContentsView, Menu, ipcMain, shell, dialog, screen, globalShortcut, safeStorage, systemPreferences } = require('electron');
 const { execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -124,7 +124,17 @@ ipcMain.on('launch', (_e, i) => { const b = cfg && cfg.buttons; if (Number.isInt
 ipcMain.on('set-url', (_e, u) => { if (!isHttp(u)) return; cfg = Object.assign(cfg || defaults(), { url: u }); saveCfg(cfg); showJarvis(); win.webContents.send('setup', false); });
 // ---- chat do Jarvis (cerebro gratis: Gemini). A chave fica so aqui, a pagina nunca ve ----
 let chatWin = null, history = [];
-const GEM = 'gemini-2.5-flash';
+let gemList = null;
+async function pickModels(key) {
+  if (gemList) return gemList;
+  const r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
+  const j = await r.json(); if (!r.ok) throw new Error((j.error && j.error.message || r.status).toString().slice(0, 200));
+  const ver = n => { const m = /gemini-(\d+(?:\.\d+)?)/.exec(n); return m ? parseFloat(m[1]) : 0; };
+  const l = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent') && /flash/.test(m.name) && !/lite|image|tts|live|audio|robotics|computer|embed|thinking|exp/.test(m.name))
+    .map(m => m.name.replace('models/', '')).sort((a, b) => ver(b) - ver(a) || (/preview/.test(a) ? 1 : 0) - (/preview/.test(b) ? 1 : 0));
+  if (!l.length) throw new Error('nenhum modelo flash liberado pra essa chave');
+  gemList = l; return l;
+}
 const getKey = () => { try { if (cfg.geminiKey && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(cfg.geminiKey, 'base64')); } catch (e) {} return sessionKey; };
 let sessionKey = '';
 ipcMain.handle('chat-has-key', () => !!getKey());
@@ -142,28 +152,40 @@ function runTool(name, a) {
     for (const rel of out) { if (hit.length >= 5) break; try { const tx = fs.readFileSync(path.join(cfg.vault, rel), 'utf8'); const ix = tx.toLowerCase().indexOf(t); if (ix >= 0 || rel.toLowerCase().includes(t)) hit.push({ nota: rel, trecho: tx.slice(Math.max(0, ix - 100), ix + 400) }); } catch (e) {} } return { resultados: hit }; }
   return { erro: 'ferramenta desconhecida' };
 }
-const SYS = 'Voce e o Jarvis, assistente pessoal do Felipe (18 anos, Rio de Janeiro). Responda em portugues do Brasil, frases curtas, palavras simples, direto, sem enfeite. Use as ferramentas para abrir sites e buscar notas quando ele pedir. Se nao souber, diga que nao sabe. Nao invente que fez algo que nao fez. Voce NAO consegue postar, clicar em paginas nem editar arquivos; diga isso se pedirem.';
-ipcMain.handle('chat-send', async (_e, text) => {
+const SYS = 'Voce e o Jarvis, assistente pessoal do Felipe (18 anos, Rio de Janeiro). Responda em portugues do Brasil, frases curtas, palavras simples, direto, sem enfeite. Use as ferramentas para abrir sites e buscar notas quando ele pedir. Se nao souber, diga que nao sabe. Nao invente que fez algo que nao fez. Se a mensagem for um audio, ouca e responda ao que foi dito. Voce NAO consegue postar, clicar em paginas nem editar arquivos; diga isso se pedirem.';
+ipcMain.handle('chat-send', async (_e, input) => {
   const key = getKey(); if (!key) throw new Error('sem chave');
-  history.push({ role: 'user', parts: [{ text: String(text).slice(0, 4000) }] }); history = history.slice(-30);
-  for (let n = 0; n < 5; n++) {
-    const r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + GEM + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ systemInstruction: { parts: [{ text: SYS }] }, contents: history, tools: TOOLS }) });
-    const j = await r.json();
-    if (!r.ok) throw new Error((j.error && j.error.message || r.status).toString().slice(0, 200));
-    const parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
-    history.push({ role: 'model', parts: parts.length ? parts : [{ text: '' }] });
-    const calls = parts.filter(p => p.functionCall);
-    if (!calls.length) return parts.map(p => p.text || '').join('').trim() || '(sem resposta)';
-    history.push({ role: 'user', parts: calls.map(p => ({ functionResponse: { name: p.functionCall.name, response: runTool(p.functionCall.name, p.functionCall.args || {}) } })) });
-  }
-  return 'Parei apos varias tentativas. Tente de novo.';
+  const isAudio = input && typeof input === 'object' && input.audio;
+  const part = isAudio ? { inlineData: { mimeType: String(input.audio.mime || 'audio/webm'), data: String(input.audio.data || '') } } : { text: String(input).slice(0, 4000) };
+  if (isAudio && part.inlineData.data.length > 6e6) throw new Error('audio muito grande');
+  history.push({ role: 'user', parts: [part] }); history = history.slice(-30);
+  const models = await pickModels(key); let used = '';
+  try {
+    for (let n = 0; n < 5; n++) {
+      let r, j;
+      for (const m of models.slice(0, 3)) {
+        r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYS }] }, contents: history, tools: TOOLS }) });
+        j = await r.json(); used = m;
+        if (r.status !== 404) break;
+      }
+      if (!r.ok) throw new Error((j.error && j.error.message || r.status).toString().slice(0, 200));
+      const parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
+      history.push({ role: 'model', parts: parts.length ? parts : [{ text: '' }] });
+      const calls = parts.filter(p => p.functionCall);
+      if (!calls.length) return parts.map(p => p.text || '').join('').trim() || '(sem resposta)';
+      history.push({ role: 'user', parts: calls.map(p => ({ functionResponse: { name: p.functionCall.name, response: runTool(p.functionCall.name, p.functionCall.args || {}) } })) });
+    }
+    return 'Parei apos varias tentativas. Tente de novo.';
+  } catch (e) { history.pop(); throw e; }
+  finally { for (const h of history) h.parts = h.parts.map(p => p.inlineData ? { text: '(mensagem de voz)' } : p); }
 });
 function openChat() {
   if (chatWin && !chatWin.isDestroyed()) { chatWin.show(); chatWin.focus(); return; }
   chatWin = new BrowserWindow({ width: 440, height: 720, x: 40, y: 60, title: 'Jarvis', backgroundColor: '#06080c', alwaysOnTop: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } });
   chatWin.setMenuBarVisibility(false); chatWin.loadFile('chat.html');
+  if (process.platform === 'darwin') { try { systemPreferences.askForMediaAccess('microphone'); } catch (e) {} }
 }
 ipcMain.on('open-chat', () => openChat());
 // ---- notas (vault do Obsidian) lidas direto da pasta, so leitura ----
