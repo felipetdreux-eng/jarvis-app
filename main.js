@@ -124,7 +124,7 @@ ipcMain.on('launch', (_e, i) => { const b = cfg && cfg.buttons; if (Number.isInt
 ipcMain.on('set-url', (_e, u) => { if (!isHttp(u)) return; cfg = Object.assign(cfg || defaults(), { url: u }); saveCfg(cfg); showJarvis(); win.webContents.send('setup', false); });
 // ---- chat do Jarvis (cerebro gratis: Gemini). A chave fica so aqui, a pagina nunca ve ----
 let chatWin = null, history = [];
-let gemList = null;
+let gemList = null, gemOk = '';
 async function pickModels(key) {
   if (gemList) return gemList;
   const r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': key } });
@@ -159,16 +159,21 @@ ipcMain.handle('chat-send', async (_e, input) => {
   const part = isAudio ? { inlineData: { mimeType: String(input.audio.mime || 'audio/webm'), data: String(input.audio.data || '') } } : { text: String(input).slice(0, 4000) };
   if (isAudio && part.inlineData.data.length > 6e6) throw new Error('audio muito grande');
   history.push({ role: 'user', parts: [part] }); history = history.slice(-30);
-  const models = await pickModels(key); let used = '';
+  const models = await pickModels(key);
   try {
     for (let n = 0; n < 5; n++) {
-      let r, j;
-      for (const m of models.slice(0, 3)) {
-        r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-          body: JSON.stringify({ systemInstruction: { parts: [{ text: SYS }] }, contents: history, tools: TOOLS }) });
-        j = await r.json(); used = m;
-        if (r.status !== 404) break;
+      let r = null, j = null, lastErr = '';
+      const order = gemOk ? [gemOk].concat(models.filter(m => m !== gemOk)) : models;
+      for (const m of order.slice(0, 6)) {
+        try {
+          r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: AbortSignal.timeout(12000),
+            body: JSON.stringify({ systemInstruction: { parts: [{ text: SYS }] }, contents: history, tools: TOOLS }) });
+          j = await r.json();
+        } catch (e) { r = null; lastErr = m + ': sem resposta em 12s'; if (m === gemOk) gemOk = ''; continue; }
+        if (r.status === 404 || r.status === 429 || r.status >= 500) { lastErr = m + ': ' + r.status; if (m === gemOk) gemOk = ''; continue; }
+        gemOk = m; break;
       }
+      if (!r) throw new Error('nenhum modelo respondeu (' + lastErr + ')');
       if (!r.ok) throw new Error((j.error && j.error.message || r.status).toString().slice(0, 200));
       const parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
       history.push({ role: 'model', parts: parts.length ? parts : [{ text: '' }] });
