@@ -333,12 +333,40 @@ function buildMenu() {
       { label: 'Recarregar', accelerator: 'CmdOrCtrl+R', click: () => view && view.webContents.reload() },
       { label: 'Mostrar/esconder dock', click: () => { cfg.dock = !(cfg.dock === true); saveCfg(cfg); win.webContents.send('dock', dockW() > 0); layout(); } },
       { label: 'Ponte com o Claude (arquivos)...', click: () => openBridge() },
+      { label: 'Procurar atualizacao', click: () => { cfg.skipVersion = ''; saveCfg(cfg); checkUpdate(); } },
       { label: 'Esconder minhas abas  (Cmd+Alt+H)', click: () => hideOthers() },
       { label: 'Recarregar atalhos do Chrome', click: () => { injected = 0; injectShortcuts(); } },
       { role: 'togglefullscreen' }, { type: 'separator' }, { role: 'quit' } ] },
     { role: 'editMenu' } ]));
 }
 // aviso de versao nova (Mac sem assinatura nao atualiza sozinho: o app avisa e abre a pagina de download)
+async function selfUpdate(j, latest) {
+  const mac = process.platform === 'darwin';
+  const asset = (j.assets || []).find(x => mac ? /-mac\.zip$/.test(x.name) : /Setup.*\.exe$/.test(x.name));
+  const bundle = mac ? path.resolve(process.execPath, '..', '..', '..') : '';
+  try {
+    if (!asset) throw new Error('sem arquivo pra este sistema');
+    if (mac) { if (!/\.app$/.test(bundle)) throw new Error('app fora de .app'); fs.accessSync(path.dirname(bundle), fs.constants.W_OK); fs.accessSync(bundle, fs.constants.W_OK); if (/AppTranslocation/.test(bundle)) throw new Error('app rodando do dmg/Downloads'); }
+    dialog.showMessageBox(win, { type: 'info', buttons: ['OK'], message: 'Baixando o Jarvis ' + latest + '...', detail: 'O app fecha e reabre sozinho em cerca de 1 minuto. Nao feche nada.' });
+    const r = await net.fetch(asset.browser_download_url, { headers: { 'User-Agent': 'jarvis-app' }, signal: AbortSignal.timeout(300000) });
+    if (!r.ok) throw new Error('download ' + r.status);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (asset.size && buf.length !== asset.size) throw new Error('arquivo incompleto');
+    const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'jarvis-up-'));
+    const file = path.join(dir, asset.name); fs.writeFileSync(file, buf);
+    if (mac) {
+      const sh = path.join(dir, 'up.sh');
+      fs.writeFileSync(sh, '#!/bin/sh\nPID="$1"; ZIP="$2"; APP="$3"\nn=0; while kill -0 "$PID" 2>/dev/null && [ $n -lt 30 ]; do sleep 1; n=$((n+1)); done\nD=$(mktemp -d) || exit 1\n/usr/bin/ditto -x -k "$ZIP" "$D" || exit 1\nNEW=$(ls -d "$D"/*.app | head -1)\n[ -d "$NEW" ] || exit 1\nrm -rf "$APP.old"\nmv "$APP" "$APP.old" || exit 1\nif mv "$NEW" "$APP"; then rm -rf "$APP.old"; else mv "$APP.old" "$APP"; fi\n/usr/bin/xattr -cr "$APP" 2>/dev/null\n/usr/bin/open "$APP"\n', { mode: 0o755 });
+      require('child_process').spawn('/bin/sh', [sh, String(process.pid), file, bundle], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      require('child_process').spawn(file, ['/S'], { detached: true, stdio: 'ignore' }).unref();
+    }
+    setTimeout(() => app.quit(), 800);
+  } catch (e) {
+    const y = await dialog.showMessageBox(win, { type: 'warning', buttons: ['Abrir pagina de download', 'Cancelar'], message: 'Nao consegui atualizar sozinho', detail: String(e && e.message || e) + '\n\nSe o Jarvis nao estiver na pasta Applications, arraste ele pra la e abra de la.' });
+    if (y.response === 0) shell.openExternal(j.html_url);
+  }
+}
 async function checkUpdate() {
   try {
     const r = await require('electron').net.fetch('https://api.github.com/repos/felipetdreux-eng/jarvis-app/releases/latest', { headers: { 'User-Agent': 'jarvis-app' } });
@@ -347,8 +375,8 @@ async function checkUpdate() {
     const nv = s => s.split('.').map(Number); const a = nv(latest), b = nv(app.getVersion());
     const newer = a.length === 3 && !a.some(isNaN) && (a[0] - b[0] || a[1] - b[1] || a[2] - b[2]) > 0;
     if (!newer || cfg.skipVersion === latest) return;
-    const x = await dialog.showMessageBox(win, { type: 'info', buttons: ['Baixar', 'Depois', 'Pular esta'], defaultId: 0, message: 'Jarvis ' + latest + ' disponivel', detail: 'Voce tem a ' + app.getVersion() + '. A pagina do Jarvis ja atualiza sozinha; so mudancas do app precisam de download.' });
-    if (x.response === 0) shell.openExternal(j.html_url);
+    const x = await dialog.showMessageBox(win, { type: 'info', buttons: ['Atualizar agora', 'Depois', 'Pular esta'], defaultId: 0, cancelId: 1, message: 'Jarvis ' + latest + ' disponivel', detail: 'Voce tem a ' + app.getVersion() + '. "Atualizar agora" baixa, troca o app e reabre sozinho. A pagina do Jarvis ja atualiza sozinha; so mudancas do app precisam disso.' });
+    if (x.response === 0) await selfUpdate(j, latest);
     else if (x.response === 2) { cfg.skipVersion = latest; saveCfg(cfg); }
   } catch (e) {}
 }
