@@ -1,0 +1,21 @@
+<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Ponte com o Claude</title><style>
+*{box-sizing:border-box}body{margin:0;padding:20px;background:#06080c;color:#e9edf4;font:13px -apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5}
+h3{margin:0 0 6px}p{color:#9aa4b5;margin:6px 0 12px}input{width:100%;padding:10px;border-radius:9px;border:1px solid rgba(255,255,255,.2);background:#0b0f17;color:#fff;font:13px inherit;margin-bottom:10px}
+button{border:1px solid #7fe3ff;background:none;color:#7fe3ff;border-radius:9px;padding:9px 14px;font:13px inherit;cursor:pointer;margin:0 8px 8px 0}
+.f{background:#121722;border-radius:8px;padding:8px 10px;margin:4px 0;word-break:break-all;display:flex;justify-content:space-between;gap:8px}.f span{color:#ff9a9a;cursor:pointer}
+#st{margin-top:10px;color:#7fe3ff}</style></head><body>
+<h3>Ponte com o Claude</h3>
+<p>O Claude escreve pedidos no repositorio privado abaixo. O Jarvis pergunta a voce antes de enviar qualquer arquivo. So le as pastas listadas. Nunca apaga nem altera nada.</p>
+<input id="repo" placeholder="repositorio (dono/nome)"><input id="tok" type="password" placeholder="token do GitHub (so desse repositorio)" autocomplete="off">
+<div id="fl"></div>
+<button id="add">+ escolher pasta</button><button id="save">salvar</button><button id="off">desligar ponte</button><div id="st"></div>
+<script>
+let folders=[];const $=id=>document.getElementById(id);
+function draw(){$('fl').innerHTML='';folders.forEach((f,i)=>{const d=document.createElement('div');d.className='f';d.textContent=f;const x=document.createElement('span');x.textContent='tirar';x.onclick=()=>{folders.splice(i,1);draw()};d.appendChild(x);$('fl').appendChild(d)})}
+(async()=>{const s=await jarvis.bridgeGet();$('repo').value=s.repo||'';folders=s.folders||[];draw();$('st').textContent=s.on?'Ponte ligada.':'Ponte desligada.'})();
+$('add').onclick=async()=>{const p=await jarvis.bridgePick();if(p&&!folders.includes(p)){folders.push(p);draw()}};
+$('save').onclick=async()=>{const r=await jarvis.bridgeSave({repo:$('repo').value.trim(),token:$('tok').value.trim(),folders});$('tok').value='';$('st').textContent=r}
+$('off').onclick=async()=>{$('st').textContent=await jarvis.bridgeSave({off:true})}
+</script></body></html>

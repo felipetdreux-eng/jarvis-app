@@ -1,6 +1,6 @@
 {
   "name": "jarvis-app",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Abre a pagina do seu Jarvis na area de trabalho e lanca abas e programas.",
   "main": "main.js",
   "author": "Felipe",
@@ -23,7 +23,8 @@
       "shell.html",
       "chat.html",
       "config.example.json",
-      "package.json"
+      "package.json",
+      "bridge.html"
     ],
     "mac": {
       "target": [

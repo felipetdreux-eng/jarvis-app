@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('jarvis', {
   chatHasKey: () => ipcRenderer.invoke('chat-has-key'),
   chatSetKey: k => ipcRenderer.invoke('chat-set-key', k),
   chatSend: (t, m) => ipcRenderer.invoke('chat-send', t, m),
+  bridgeGet: () => ipcRenderer.invoke('bridge-get'),
+  bridgePick: () => ipcRenderer.invoke('bridge-pick'),
+  bridgeSave: o => ipcRenderer.invoke('bridge-save', o),
   mode: n => ipcRenderer.send('mode', n),
   onDock: f => ipcRenderer.on('dock', (_e, on) => f(on)),
   onSetup: f => ipcRenderer.on('setup', (_e, on) => f(on))
