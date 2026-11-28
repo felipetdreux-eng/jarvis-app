@@ -10,11 +10,13 @@ button{border:1px solid #7fe3ff;background:none;color:#7fe3ff;border-radius:9px;
 <p>O Claude escreve pedidos no repositorio privado abaixo. O Jarvis pergunta a voce antes de enviar qualquer arquivo. So le as pastas listadas. Nunca apaga nem altera nada.</p>
 <input id="repo" placeholder="repositorio (dono/nome)"><input id="tok" type="password" placeholder="token do GitHub (so desse repositorio)" autocomplete="off">
 <div id="fl"></div>
-<button id="add">+ escolher pasta</button><button id="save">salvar</button><button id="off">desligar ponte</button><div id="st"></div>
+<button id="add">+ escolher pasta</button><button id="save">salvar</button><button id="off">desligar ponte</button><button id="now">checar agora</button><div id="st"></div><div id="dg" style="margin-top:10px;color:#9aa4b5;font-size:12px"></div>
 <script>
 let folders=[];const $=id=>document.getElementById(id);
 function draw(){$('fl').innerHTML='';folders.forEach((f,i)=>{const d=document.createElement('div');d.className='f';d.textContent=f;const x=document.createElement('span');x.textContent='tirar';x.onclick=()=>{folders.splice(i,1);draw()};d.appendChild(x);$('fl').appendChild(d)})}
 (async()=>{const s=await jarvis.bridgeGet();$('repo').value=s.repo||'';folders=s.folders||[];draw();$('st').textContent=s.on?'Ponte ligada.':'Ponte desligada.'})();
+$('now').onclick=async()=>{$('dg').textContent='checando...';$('dg').textContent='Estado: '+await jarvis.bridgeNow()};
+setInterval(async()=>{const s=await jarvis.bridgeGet();$('dg').textContent='Jarvis '+s.versao+' | Estado: '+s.status},3000);
 $('add').onclick=async()=>{const p=await jarvis.bridgePick();if(p&&!folders.includes(p)){folders.push(p);draw()}};
 $('save').onclick=async()=>{const r=await jarvis.bridgeSave({repo:$('repo').value.trim(),token:$('tok').value.trim(),folders});$('tok').value='';$('st').textContent=r}
 $('off').onclick=async()=>{$('st').textContent=await jarvis.bridgeSave({off:true})}

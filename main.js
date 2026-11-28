@@ -242,7 +242,8 @@ ipcMain.on('menu', (_e, what) => {
 
 // ---- ponte com o Claude: pedidos num repo privado do GitHub; so pastas escolhidas, so leitura, pergunta antes ----
 const BR_MAX = 25 * 1024 * 1024, BR_BAD = /(^|[\\/])\.|senha|password|passwd|secret|token|\.env|\.pem|\.key$|id_rsa|keychain|cookies|login data|\.kdbx|credential/i;
-let brBusy = false, brSeen = new Set(), brWin = null;
+let brBusy = false, brSeen = new Set(), brWin = null, brStatus = 'ainda nao consultou';
+const brNow = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0'); };
 const brTok = () => { try { if (cfg.bridgeToken && safeStorage.isEncryptionAvailable()) return safeStorage.decryptString(Buffer.from(cfg.bridgeToken, 'base64')); } catch (e) {} return ''; };
 async function brApi(method, url, body) {
   const r = await net.fetch('https://api.github.com/repos/' + cfg.bridge.repo + url, { method, headers: { Authorization: 'Bearer ' + brTok(), Accept: 'application/vnd.github+json', 'User-Agent': 'jarvis-app', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
@@ -257,6 +258,7 @@ function brResolve(rel) {
 }
 async function brHandle(pedido, id) {
   const tipo = pedido.tipo === 'ler' ? 'ler' : 'listar'; const alvo = String(pedido.caminho || '').slice(0, 300);
+  try { app.focus({ steal: true }); if (process.platform === 'darwin' && app.dock) app.dock.bounce('critical'); } catch (e) {}
   const choice = await dialog.showMessageBox({ type: 'question', buttons: ['Negar', 'Permitir'], defaultId: 0, cancelId: 0, title: 'Pedido do Claude',
     message: 'O Claude quer ' + (tipo === 'ler' ? 'LER o arquivo' : 'LISTAR a pasta') + ':', detail: (alvo || '(pastas da ponte)') + '\n\nMotivo: ' + String(pedido.motivo || '(nao informado)').slice(0, 300) + '\n\nSe voce nao pediu isso, clique Negar.' });
   let resp = { id, tipo, caminho: alvo, ts: Date.now() };
@@ -270,23 +272,25 @@ async function brHandle(pedido, id) {
   if (put.status >= 300) throw new Error('GitHub ' + put.status);
 }
 async function brPoll() {
-  if (brBusy || !cfg.bridge || !cfg.bridge.repo || !cfg.bridge.folders || !cfg.bridge.folders.length || !brTok()) return; brBusy = true;
+  if (brBusy) return; if (!cfg.bridge || !cfg.bridge.repo || !cfg.bridge.folders || !cfg.bridge.folders.length || !brTok()) { brStatus = brNow() + ' ponte nao configurada (falta repo, pasta ou token)'; return; } brBusy = true;
   try {
-    const ls = await brApi('GET', '/contents/pedidos'); if (ls.status !== 200 || !Array.isArray(ls.j)) return;
+    const ls = await brApi('GET', '/contents/pedidos'); if (ls.status !== 200 || !Array.isArray(ls.j)) { brStatus = brNow() + ' erro ao ler pedidos: GitHub ' + ls.status + ' ' + String(ls.j && ls.j.message || '').slice(0, 120); return; }
+    brStatus = brNow() + ' ok (' + ls.j.filter(x => /\.json$/.test(x.name)).length + ' pedido(s) na fila)';
     const rs = await brApi('GET', '/contents/respostas'); const done = new Set(Array.isArray(rs.j) ? rs.j.map(x => x.name.replace(/\.json$/, '')) : []);
     for (const f of ls.j) { const id = f.name.replace(/\.json$/, ''); if (!/\.json$/.test(f.name) || !/^[\w.-]{1,60}$/.test(id) || done.has(id) || brSeen.has(id)) continue; brSeen.add(id);
       const g = await brApi('GET', '/contents/pedidos/' + f.name); if (g.status !== 200) continue;
       let p; try { p = JSON.parse(Buffer.from(g.j.content, 'base64').toString('utf8')); } catch (e) { continue; }
       if (p.ts && Date.now() - p.ts > 15 * 60 * 1000) continue; // pedido velho: ignora
       await brHandle(p, id); }
-  } catch (e) {} finally { brBusy = false; }
+  } catch (e) { brStatus = brNow() + ' erro: ' + String(e && e.message || e).slice(0, 150); } finally { brBusy = false; }
 }
 function openBridge() {
   if (brWin && !brWin.isDestroyed()) { brWin.show(); return; }
   brWin = new BrowserWindow({ width: 520, height: 520, title: 'Ponte com o Claude', backgroundColor: '#06080c', webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true } });
   brWin.setMenuBarVisibility(false); brWin.loadFile('bridge.html');
 }
-ipcMain.handle('bridge-get', () => ({ repo: cfg.bridge && cfg.bridge.repo || '', folders: cfg.bridge && cfg.bridge.folders || [], on: !!(cfg.bridge && cfg.bridgeToken) }));
+ipcMain.handle('bridge-get', () => ({ repo: cfg.bridge && cfg.bridge.repo || '', folders: cfg.bridge && cfg.bridge.folders || [], on: !!(cfg.bridge && cfg.bridgeToken), status: brStatus, versao: app.getVersion() }));
+ipcMain.handle('bridge-now', async () => { brSeen.clear(); await brPoll(); return brStatus; });
 ipcMain.handle('bridge-pick', async () => { const r = await dialog.showOpenDialog(brWin || win, { properties: ['openDirectory'], title: 'Pasta que o Claude pode consultar' }); return r.canceled ? '' : r.filePaths[0]; });
 ipcMain.handle('bridge-save', (_e, o) => {
   if (o && o.off) { delete cfg.bridge; delete cfg.bridgeToken; saveCfg(cfg); return 'Ponte desligada.'; }
@@ -295,7 +299,7 @@ ipcMain.handle('bridge-save', (_e, o) => {
   if (!folders.length) return 'Escolha ao menos uma pasta.';
   cfg.bridge = { repo: o.repo, folders };
   if (o.token) { if (!safeStorage.isEncryptionAvailable()) return 'Este computador nao permite guardar o token com seguranca.'; cfg.bridgeToken = safeStorage.encryptString(o.token).toString('base64'); }
-  if (!cfg.bridgeToken) return 'Cole o token.'; saveCfg(cfg); brSeen.clear(); return 'Ponte ligada. Consulta a cada 30 segundos enquanto o Jarvis estiver aberto.';
+  if (!cfg.bridgeToken) return 'Cole o token.'; saveCfg(cfg); brSeen.clear(); setTimeout(brPoll, 1000); return 'Ponte ligada. Consulta a cada 30 segundos enquanto o Jarvis estiver aberto.';
 });
 
 app.whenReady().then(() => {
