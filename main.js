@@ -162,7 +162,10 @@ function runTool(name, a) {
   return { erro: 'ferramenta desconhecida' };
 }
 const SYS = 'Voce e o Jarvis, assistente pessoal do Felipe (18 anos, Rio de Janeiro). Responda em portugues do Brasil, frases curtas, palavras simples, direto, sem enfeite. Use as ferramentas para abrir sites e buscar notas quando ele pedir. Se nao souber, diga que nao sabe. Nao invente que fez algo que nao fez. Se a mensagem for um audio, ouca e responda ao que foi dito. Voce NAO consegue postar, clicar em paginas nem editar arquivos; diga isso se pedirem.';
-ipcMain.handle('chat-send', async (_e, input) => {
+const SYS_STUDY = 'Voce e o tutor de matematica do Felipe (18 anos, Rio de Janeiro), que estuda matematica de 8o ano para a prova de recuperacao. Portugues do Brasil, frases curtas, palavras simples, sem enfeite. Metodo: (1) ao comecar um assunto novo, diga o NOME do assunto e PRA QUE SERVE, antes de explicar. (2) Explique a regra e mostre um exemplo resolvido DIFERENTE do exercicio. (3) Depois de explicar, de o exercicio. Se ele pedir uma lista, de 2 ou 3 de uma vez. (4) Explique qualquer regra, operacao ou nome novo antes de usar, mesmo que pareca obvio. (5) Quando ele mandar a resposta de um bloco, mande o gabarito completo e o proximo bloco de 10 na mesma hora; se ele errar, mande menos exercicios (so o necessario) e mostre so a etapa errada. (6) Ele gosta de tentar sozinho antes de ver a resposta, mas se pedir a resposta, de a resposta sempre. (7) Nao faca perguntas triviais. (8) Confira suas contas passo a passo antes de dar o gabarito; se nao tiver certeza de um resultado, diga. Voce nao tem ferramentas aqui.';
+let histMode = '';
+ipcMain.handle('chat-send', async (_e, input, mode) => {
+  const study = mode === 'study'; if ((study ? 'study' : 'chat') !== histMode) { history = []; histMode = study ? 'study' : 'chat'; }
   const key = getKey(); if (!key) throw new Error('sem chave');
   const isAudio = input && typeof input === 'object' && input.audio;
   const part = isAudio ? { inlineData: { mimeType: String(input.audio.mime || 'audio/webm'), data: String(input.audio.data || '') } } : { text: String(input).slice(0, 4000) };
@@ -176,7 +179,7 @@ ipcMain.handle('chat-send', async (_e, input) => {
       for (const m of order.slice(0, 6)) {
         try {
           r = await net.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, signal: AbortSignal.timeout(12000),
-            body: JSON.stringify({ systemInstruction: { parts: [{ text: SYS }] }, contents: history, tools: TOOLS }) });
+            body: JSON.stringify(study ? { systemInstruction: { parts: [{ text: SYS_STUDY }] }, contents: history } : { systemInstruction: { parts: [{ text: SYS }] }, contents: history, tools: TOOLS }) });
           j = await r.json();
         } catch (e) { r = null; lastErr = m + ': sem resposta em 12s'; if (m === gemOk) gemOk = ''; continue; }
         if (r.status === 404 || r.status === 429 || r.status >= 500) { lastErr = m + ': ' + r.status; if (m === gemOk) gemOk = ''; continue; }

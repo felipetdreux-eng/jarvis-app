@@ -10,20 +10,21 @@ body{display:flex;flex-direction:column}
 #i{flex:1;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:#0b0f17;color:#fff;font:14px inherit;outline:none}
 #i:focus{border-color:#7fe3ff}button{border:1px solid #7fe3ff;background:none;color:#7fe3ff;border-radius:10px;padding:0 16px;font:13px inherit;cursor:pointer}
 #k{display:none;padding:22px;gap:12px;flex-direction:column}#k.on{display:flex}#k input{padding:11px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#0b0f17;color:#fff;font:13px inherit}
-#mic.rec{background:#7fe3ff;color:#06080c}#sp.off{opacity:.45}#k p{margin:0;color:#9aa4b5;line-height:1.5;font-size:13px}#k button{padding:10px}
+#mic.rec{background:#7fe3ff;color:#06080c}#st.on{background:#7fe3ff;color:#06080c}#sp.off{opacity:.45}#k p{margin:0;color:#9aa4b5;line-height:1.5;font-size:13px}#k button{padding:10px}
 </style></head><body>
 <div id="k"><p><b>Cerebro do Jarvis (gratis)</b><br>Crie uma chave no Google AI Studio (aistudio.google.com, entre com sua conta Google, "Get API key"). Cole aqui. Ela fica so no seu computador.</p>
 <input id="kv" type="password" placeholder="cole a chave" autocomplete="off"><button id="ks">salvar</button></div>
 <div id="log"></div>
-<form id="f"><button type="button" id="mic" title="segure para falar (clique para comecar/parar)">mic</button><input id="i" placeholder="fale ou escreva" autocomplete="off"><button>enviar</button><button type="button" id="sp" title="ler respostas em voz alta">voz</button></form>
+<form id="f"><button type="button" id="mic" title="segure para falar (clique para comecar/parar)">mic</button><input id="i" placeholder="fale ou escreva" autocomplete="off"><button>enviar</button><button type="button" id="st" title="modo tutor de matematica">estudar</button><button type="button" id="sp" title="ler respostas em voz alta">voz</button></form>
 <script>
 const log=document.getElementById('log'),i=document.getElementById('i'),k=document.getElementById('k');
 function add(c,t){const d=document.createElement('div');d.className='m '+c;d.textContent=t;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
 async function init(){if(!(await jarvis.chatHasKey())){k.classList.add('on');document.getElementById('f').style.display='none'}else add('s','Pronto. Peça: "abre o projeto Agenda24", "abre instagram e whatsapp", "o que tenho nas notas sobre Fuply?"')}
 document.getElementById('ks').onclick=async()=>{const v=document.getElementById('kv').value.trim();if(v.length<20)return;await jarvis.chatSetKey(v);k.classList.remove('on');document.getElementById('f').style.display='flex';log.innerHTML='';init()};
 document.getElementById('f').onsubmit=async e=>{e.preventDefault();const t=i.value.trim();if(!t)return;i.value='';add('u',t);const w=add('a','...');
-  try{const r=await jarvis.chatSend(t);w.textContent=r;say(r)}catch(x){w.textContent='Erro: '+(x&&x.message||x)}log.scrollTop=log.scrollHeight};
+  try{const r=await jarvis.chatSend(t,mode);w.textContent=r;say(r)}catch(x){w.textContent='Erro: '+(x&&x.message||x)}log.scrollTop=log.scrollHeight};
 
+let mode='chat';const st=document.getElementById('st');st.onclick=()=>{mode=mode==='study'?'chat':'study';st.classList.toggle('on',mode==='study');log.innerHTML='';add('s',mode==='study'?'Modo estudar ligado. Diga o assunto de matematica (ex: "equacao do 1o grau") ou "comecar".':'Modo normal.');i.placeholder=mode==='study'?'assunto ou sua resposta':'fale ou escreva'};
 let speak=true;const sp=document.getElementById('sp');sp.onclick=()=>{speak=!speak;sp.classList.toggle('off',!speak);if(!speak)speechSynthesis.cancel()};
 function say(t){if(!speak||!window.speechSynthesis)return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t.slice(0,600));u.lang='pt-BR';const v=speechSynthesis.getVoices().find(v=>/pt[-_]BR/i.test(v.lang));if(v)u.voice=v;speechSynthesis.speak(u)}
 let rec=null,chunks=[];const mic=document.getElementById('mic');
@@ -37,7 +38,7 @@ mic.onclick=async()=>{
       const blob=new Blob(chunks,{type});if(blob.size<2000){add('s','Nao ouvi nada. Tente de novo.');return}
       const b64=await new Promise(r=>{const f=new FileReader();f.onload=()=>r(String(f.result).split(',')[1]);f.readAsDataURL(blob)});
       add('u','(voz)');const w=add('a','...');
-      try{const t=await jarvis.chatSend({audio:{mime:type.split(';')[0],data:b64}});w.textContent=t;say(t)}catch(x){w.textContent='Erro: '+(x&&x.message||x)}log.scrollTop=log.scrollHeight};
+      try{const t=await jarvis.chatSend({audio:{mime:type.split(';')[0],data:b64}},mode);w.textContent=t;say(t)}catch(x){w.textContent='Erro: '+(x&&x.message||x)}log.scrollTop=log.scrollHeight};
     rec.start();setTimeout(()=>{if(rec&&rec.state==='recording')rec.stop()},60000)
   }catch(x){add('s','Sem acesso ao microfone. Libere em Ajustes do sistema > Privacidade > Microfone.')}
 };
