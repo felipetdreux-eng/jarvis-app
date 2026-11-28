@@ -249,6 +249,14 @@ async function brApi(method, url, body) {
   const r = await net.fetch('https://api.github.com/repos/' + cfg.bridge.repo + url, { method, headers: { Authorization: 'Bearer ' + brTok(), Accept: 'application/vnd.github+json', 'User-Agent': 'jarvis-app', 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) });
   const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch (e) {} return { status: r.status, j };
 }
+const BR_EXT = /\.(mp3|wav|m4a|aac|ogg|opus|flac|mp4|mov|webm|mkv|srt|vtt|txt|md|json|csv|zip)$/i, BR_DAYS = 3;
+function brFiltered(root) { return /^(downloads|transfer[eê]ncias)$/i.test(path.basename(root)); }
+function brAllow(root, full, st) { // pasta Downloads: so midia/texto e so arquivo recente
+  if (!brFiltered(root)) return true;
+  if (Date.now() - st.mtimeMs > BR_DAYS * 864e5) return false;
+  return st.isDirectory() || BR_EXT.test(full);
+}
+function brRootOf(real) { return ((cfg.bridge && cfg.bridge.folders) || []).find(f => { try { const rr = fs.realpathSync(f); return real === rr || real.startsWith(rr + path.sep); } catch (e) { return false; } }); }
 function brResolve(rel) {
   const folders = (cfg.bridge && cfg.bridge.folders) || []; const parts = String(rel || '').replace(/\\/g, '/').split('/').filter(Boolean);
   const root = folders.find(f => path.basename(f) === parts[0]); if (!root) return null;
@@ -266,8 +274,8 @@ async function brHandle(pedido, id) {
   else if (!alvo) { resp.status = 'ok'; resp.pastas = (cfg.bridge.folders || []).map(f => path.basename(f)); }
   else { const real = brResolve(alvo);
     if (!real) resp.status = 'bloqueado (fora das pastas da ponte, nome sensivel ou nao existe)';
-    else if (tipo === 'listar') { try { resp.status = 'ok'; resp.itens = fs.readdirSync(real, { withFileTypes: true }).filter(d => !BR_BAD.test(d.name)).slice(0, 200).map(d => ({ nome: d.name, pasta: d.isDirectory(), bytes: d.isDirectory() ? 0 : fs.statSync(path.join(real, d.name)).size })); } catch (e) { resp.status = 'erro: ' + e.message; } }
-    else { try { const st = fs.statSync(real); if (!st.isFile()) resp.status = 'nao e arquivo'; else if (st.size > BR_MAX) resp.status = 'grande demais (' + st.size + ' bytes, limite ' + BR_MAX + ')'; else { resp.status = 'ok'; resp.nome = path.basename(real); resp.bytes = st.size; resp.base64 = fs.readFileSync(real).toString('base64'); } } catch (e) { resp.status = 'erro: ' + e.message; } } }
+    else if (tipo === 'listar') { try { resp.status = 'ok'; const rt = brRootOf(real); resp.itens = fs.readdirSync(real, { withFileTypes: true }).filter(d => !BR_BAD.test(d.name)).map(d => { const fp = path.join(real, d.name); let st; try { st = fs.statSync(fp); } catch (e) { return null; } return rt && !brAllow(rt, fp, st) ? null : { nome: d.name, pasta: d.isDirectory(), bytes: d.isDirectory() ? 0 : st.size, modificado: new Date(st.mtimeMs).toISOString() }; }).filter(Boolean).sort((a, b) => b.modificado.localeCompare(a.modificado)).slice(0, 200); } catch (e) { resp.status = 'erro: ' + e.message; } }
+    else { try { const st = fs.statSync(real); const rt = brRootOf(real); if (!st.isFile()) resp.status = 'nao e arquivo'; else if (rt && !brAllow(rt, real, st)) resp.status = 'bloqueado (Downloads so libera midia/texto dos ultimos ' + BR_DAYS + ' dias)'; else if (st.size > BR_MAX) resp.status = 'grande demais (' + st.size + ' bytes, limite ' + BR_MAX + ')'; else { resp.status = 'ok'; resp.nome = path.basename(real); resp.bytes = st.size; resp.base64 = fs.readFileSync(real).toString('base64'); } } catch (e) { resp.status = 'erro: ' + e.message; } } }
   const put = await brApi('PUT', '/contents/respostas/' + id + '.json', { message: 'resposta ' + id, content: Buffer.from(JSON.stringify(resp)).toString('base64') });
   if (put.status >= 300) throw new Error('GitHub ' + put.status);
 }
