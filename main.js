@@ -315,6 +315,12 @@ app.whenReady().then(() => {
   if (!cfg) cfg = defaults();
   if (cfg.v === 2) { delete cfg.url; cfg.v = 3; saveCfg(cfg); } // v0.13: pagina local do vault em vez do preview do Claude
   if (!cfg.v || cfg.v < 2) { const d = defaults(); cfg.url = d.url; delete cfg.vault; cfg.v = d.v; saveCfg(cfg); } // v0.8: volta pro link padrao (mesma pagina da web)
+  try { // v0.15.5: no Mac, se nao esta em Applications, se move sozinho (precisa pra atualizar sozinho)
+    if (process.platform === 'darwin' && app.isPackaged && !app.isInApplicationsFolder()) {
+      const r = dialog.showMessageBoxSync({ type: 'question', buttons: ['Mover pra Applications', 'Agora nao'], defaultId: 0, message: 'Mover o Jarvis pra pasta Applications?', detail: 'Assim ele atualiza sozinho e voce nao baixa mais nada.' });
+      if (r === 0) { try { if (app.moveToApplicationsFolder()) return; } catch (e) { dialog.showErrorBox('Nao consegui mover', String(e && e.message || e)); } }
+    }
+  } catch (e) {}
   buildMenu();
   createWindow();
   setTimeout(checkUpdate, 6000);
